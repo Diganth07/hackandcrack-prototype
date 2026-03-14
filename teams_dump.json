@@ -1,0 +1,61 @@
+{
+  "documents": [
+    {
+      "name": "projects/hackandcrack-protype/databases/(default)/documents/teams/TeamAlpha",
+      "fields": {
+        "score": {
+          "integerValue": "0"
+        },
+        "Team name": {
+          "stringValue": "TeamAlpha"
+        },
+        "LeaderName": {
+          "stringValue": "John"
+        },
+        "registered": {
+          "booleanValue": true
+        }
+      },
+      "createTime": "2026-03-14T10:52:54.599299Z",
+      "updateTime": "2026-03-14T10:52:54.599299Z"
+    },
+    {
+      "name": "projects/hackandcrack-protype/databases/(default)/documents/teams/TeamBeta",
+      "fields": {
+        "registered": {
+          "booleanValue": true
+        },
+        "TeamName": {
+          "stringValue": "TeamBeta"
+        },
+        "LeaderName": {
+          "stringValue": "Jane"
+        },
+        "score": {
+          "integerValue": "0"
+        }
+      },
+      "createTime": "2026-03-14T11:32:14.602841Z",
+      "updateTime": "2026-03-14T11:32:14.602841Z"
+    },
+    {
+      "name": "projects/hackandcrack-protype/databases/(default)/documents/teams/TeamGamma",
+      "fields": {
+        "score": {
+          "integerValue": "0"
+        },
+        "TeamName": {
+          "stringValue": "TeamGamma"
+        },
+        "LeaderName": {
+          "stringValue": "Bob"
+        },
+        "registered": {
+          "booleanValue": true
+        }
+      },
+      "createTime": "2026-03-14T11:33:43.288797Z",
+      "updateTime": "2026-03-14T11:33:43.288797Z"
+    }
+  ]
+}
