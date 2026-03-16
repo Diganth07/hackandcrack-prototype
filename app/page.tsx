@@ -17,7 +17,11 @@ import {
   ChevronRight, 
   Code2, 
   Award,
-  Users
+  Users,
+  Timer,
+  Plus,
+  Minus,
+  Pause
 } from "lucide-react";
 
 // --- 1. FIREBASE CONFIGURATION ---
@@ -491,6 +495,15 @@ export default function EventPlatform() {
   const [answeredInR1, setAnsweredInR1] = useState<Set<number>>(new Set());
   const [isFinished, setIsFinished] = useState(false);
   const [showRoundIntro, setShowRoundIntro] = useState(false);
+  const [timeLeft, setTimeLeft] = useState(300); // 5 minutes in seconds
+  const [isTimerActive, setIsTimerActive] = useState(false);
+  const [round1Enabled, setRound1Enabled] = useState(false);
+  const [isRound1Completed, setIsRound1Completed] = useState(false);
+  const [globalTimeLeft, setGlobalTimeLeft] = useState(300);
+  const [globalTimerActive, setGlobalTimerActive] = useState(false);
+  const [tabSwitches, setTabSwitches] = useState(0);
+  const [questionTimeLeft, setQuestionTimeLeft] = useState(30);
+  const [isQuestionTimerActive, setIsQuestionTimerActive] = useState(false);
 
   // Refs to avoid stale closures inside async runCode
   const currentQIndexRef = useRef(currentQIndex);
@@ -503,13 +516,195 @@ export default function EventPlatform() {
   useEffect(() => { scoreRef.current = score; }, [score]);
   useEffect(() => { teamNameRef.current = teamName; }, [teamName]);
 
+  // Timer Logic
+  useEffect(() => {
+    let interval: any = null;
+    if (isTimerActive && timeLeft > 0 && round === 1 && round1Enabled) {
+      interval = setInterval(() => {
+        setTimeLeft((prev) => {
+          const newTime = prev - 1;
+          localStorage.setItem("eventTimeLeft", newTime.toString());
+          return newTime;
+        });
+      }, 1000);
+    } else if (timeLeft === 0 && isTimerActive) {
+      setIsTimerActive(false);
+      localStorage.setItem("eventTimerActive", "false");
+      setIsRound1Completed(true);
+      localStorage.setItem("eventRound1Completed", "true");
+      alert("⏰ Time is up for Round 1!");
+      // NO AUTO-TRANSITION TO ROUND 2
+    }
+    return () => clearInterval(interval);
+  }, [isTimerActive, timeLeft, round, round1Enabled]);
+
+  // Global Event Settings Listener
+  useEffect(() => {
+    const unsub = onSnapshot(doc(db, "eventSettings", "metadata"), (docSnap) => {
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        setRound1Enabled(data.round1Enabled || false);
+        setGlobalTimeLeft(data.globalTimeLeft ?? 300);
+        setGlobalTimerActive(data.globalTimerActive ?? false);
+      }
+    });
+    return () => unsub();
+  }, []);
+
+  // Admin Countdown Logic (Only runs if view is admin-dashboard)
+  useEffect(() => {
+    let interval: any = null;
+    if (view === "admin-dashboard" && globalTimerActive && globalTimeLeft > 0) {
+      interval = setInterval(async () => {
+        const newTime = globalTimeLeft - 1;
+        await setDoc(doc(db, "eventSettings", "metadata"), { globalTimeLeft: newTime }, { merge: true });
+        if (newTime <= 0) {
+          await setDoc(doc(db, "eventSettings", "metadata"), { globalTimerActive: false }, { merge: true });
+        }
+      }, 1000);
+    }
+    return () => clearInterval(interval);
+  }, [view, globalTimerActive, globalTimeLeft]);
+
+  // Participant Global Enforcement
+  useEffect(() => {
+    if (round === 1 && globalTimeLeft <= 0 && round1Enabled) {
+      setIsRound1Completed(true);
+      localStorage.setItem("eventRound1Completed", "true");
+    }
+    // Auto-start if admin initiated
+    if (round === 1 && round1Enabled && globalTimerActive && showRoundIntro) {
+      setShowRoundIntro(false);
+      setQuestionTimeLeft(30);
+      setIsQuestionTimerActive(true);
+      localStorage.setItem("eventQTimeLeft", "30");
+      localStorage.setItem("eventQTimerActive", "true");
+    }
+  }, [round, globalTimeLeft, round1Enabled, globalTimerActive, showRoundIntro]);
+
+  // Per-Question Timer Logic
+  useEffect(() => {
+    let interval: any = null;
+    if (isQuestionTimerActive && questionTimeLeft > 0 && round === 1) {
+      interval = setInterval(() => {
+        setQuestionTimeLeft((prev) => {
+          const newTime = prev - 1;
+          localStorage.setItem("eventQTimeLeft", newTime.toString());
+          return newTime;
+        });
+      }, 1000);
+    } else if (questionTimeLeft === 0 && isQuestionTimerActive) {
+      // Auto-advance logic
+      const nextIndex = currentQIndex + 1;
+      if (nextIndex < 30) {
+        setQuestionTimeLeft(30);
+        setCurrentQIndex(nextIndex);
+        localStorage.setItem("eventQIndex", nextIndex.toString());
+        syncProgress({ qIndex: nextIndex });
+      } else {
+        setIsQuestionTimerActive(false);
+        setIsRound1Completed(true);
+        localStorage.setItem("eventRound1Completed", "true");
+      }
+    }
+    return () => clearInterval(interval);
+  }, [isQuestionTimerActive, questionTimeLeft, round, round1Enabled, currentQIndex]);
+
+  // Security: Prevent Right-Click and DevTools shortcuts for participants
+  useEffect(() => {
+    // Only apply if not in admin view
+    if (view === "admin-dashboard") return;
+
+    const handleContextMenu = (e: MouseEvent) => {
+      e.preventDefault();
+      // Optional: alert("Right-click is restricted.");
+    };
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Block F12
+      if (e.key === "f12" || e.keyCode === 123) {
+        e.preventDefault();
+        return false;
+      }
+      
+      // Block Ctrl+Shift+I, J, C and Ctrl+U
+      if ((e.ctrlKey && e.shiftKey && (e.key === "I" || e.key === "J" || e.key === "C")) || 
+          (e.ctrlKey && (e.key === "u" || e.key === "U"))) {
+        e.preventDefault();
+        return false;
+      }
+    };
+
+    window.addEventListener("contextmenu", handleContextMenu);
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      window.removeEventListener("contextmenu", handleContextMenu);
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [view]);
+
+  /* Anti-Cheat: Tab Switching Detection (Temporarily Disabled)
+  useEffect(() => {
+    if (view !== "game" || !teamName) return;
+
+    const handleVisibilityChange = async () => {
+      if (document.visibilityState === "hidden") {
+        const newCount = tabSwitches + 1;
+        setTabSwitches(newCount);
+        
+        await setDoc(doc(db, "activeSessions", teamName), { 
+          tabSwitches: newCount 
+        }, { merge: true });
+
+        if (newCount >= 3) {
+          alert("🚨 SECURITY VIOLATION 🚨\n\nYou have deviated 3 times. According to system protocol, you are now disqualified and logged out.");
+          handleLogout();
+        }
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
+  }, [view, teamName, tabSwitches]);
+  */
+
+  // Restore timer on load
+  useEffect(() => {
+    const savedTime = localStorage.getItem("eventTimeLeft");
+    const savedTimerActive = localStorage.getItem("eventTimerActive");
+    const savedRound1Completed = localStorage.getItem("eventRound1Completed");
+    
+    const savedQTimeLeft = localStorage.getItem("eventQTimeLeft");
+    const savedQTimerActive = localStorage.getItem("eventQTimerActive");
+    
+    if (savedTime && round === 1) {
+      setTimeLeft(parseInt(savedTime));
+    }
+    if (savedTimerActive === "true" && round === 1) {
+      setIsTimerActive(true);
+    }
+    if (savedQTimeLeft && round === 1) {
+      setQuestionTimeLeft(parseInt(savedQTimeLeft));
+    }
+    if (savedQTimerActive === "true" && round === 1) {
+      setIsQuestionTimerActive(true);
+    }
+    if (savedRound1Completed === "true") {
+      setIsRound1Completed(true);
+    }
+  }, [round]);
+
   const currentQ = questions[currentQIndex];
 
   // Restore round progress from localStorage on session load
   useEffect(() => {
     const checkSession = async () => {
       const savedTeam = localStorage.getItem("eventTeamName");
-      const savedScore = localStorage.getItem("eventTeamScore");
+      const storedQIndex = localStorage.getItem("eventQIndex");
+    const storedScore = localStorage.getItem("eventTeamScore");
+    const storedQTimeLeft = localStorage.getItem("eventQTimeLeft");
+    const storedQTimerActive = localStorage.getItem("eventQTimerActive");
       const savedDeviceId = localStorage.getItem("eventDeviceId");
 
       if (savedTeam && savedDeviceId) {
@@ -520,7 +715,7 @@ export default function EventPlatform() {
             if (session.deviceId === savedDeviceId && session.active === true) {
               setTeamName(savedTeam);
               // Restore score from Firebase (authoritative)
-              setScore(session.score || parseInt(savedScore || "0"));
+              setScore(session.score || parseInt(storedScore || "0"));
               // Restore round progress from Firebase (authoritative)
               const fbRound = session.round || 1;
               const fbQIndex = session.currentQIndex || 0;
@@ -529,10 +724,13 @@ export default function EventPlatform() {
               setCurrentQIndex(fbQIndex);
               setAnsweredInR1(new Set(fbAnswered));
               setIsFinished(session.isFinished || localStorage.getItem("eventFinished") === "true");
+              setIsRound1Completed(session.isRound1Completed || false);
+              setTabSwitches(session.tabSwitches || 0);
               // Sync localStorage too
               localStorage.setItem("eventRound", fbRound.toString());
               localStorage.setItem("eventQIndex", fbQIndex.toString());
               localStorage.setItem("eventAnsweredR1", JSON.stringify(fbAnswered));
+              localStorage.setItem("eventRound1Completed", (session.isRound1Completed || false).toString());
               setView("game");
               if (fbQIndex === 0) setShowRoundIntro(true);
             } else {
@@ -674,6 +872,7 @@ export default function EventPlatform() {
         round: currentRound,
         currentQIndex: currentQIdx,
         answeredInR1: currentAnswered,
+        tabSwitches: 0,
         active: true
       }, { merge: true });
 
@@ -772,6 +971,9 @@ export default function EventPlatform() {
     localStorage.removeItem("eventQIndex");
     localStorage.removeItem("eventAnsweredR1");
     localStorage.removeItem("eventFinished");
+    localStorage.removeItem("eventTimeLeft");
+    localStorage.removeItem("eventTimerActive");
+    localStorage.removeItem("eventRound1Completed");
 
     setView("role-selection");
     setTeamName("");
@@ -919,11 +1121,19 @@ export default function EventPlatform() {
           round: 1,
           currentQIndex: 0,
           answeredInR1: [],
-          isFinished: false
+          isFinished: false,
+          isRound1Completed: false,
+          tabSwitches: 0
         }, { merge: true })
       );
 
-      await Promise.all([...teamPromises, ...sessionPromises]);
+      const metadataUpdate = setDoc(doc(db, "eventSettings", "metadata"), { 
+        round1Enabled: false,
+        globalTimerActive: false,
+        globalTimeLeft: 300
+      }, { merge: true });
+
+      await Promise.all([...teamPromises, ...sessionPromises, metadataUpdate]);
       
       alert("✅ All points and progress have been reset!");
       // Reset local state if applicable
@@ -932,15 +1142,62 @@ export default function EventPlatform() {
       localStorage.setItem("eventQIndex", "0");
       localStorage.setItem("eventAnsweredR1", "[]");
       localStorage.setItem("eventFinished", "false");
+      localStorage.setItem("eventTimeLeft", "300");
+      localStorage.setItem("eventTimerActive", "false");
       
       setScore(0);
       setRound(1);
       setCurrentQIndex(0);
       setAnsweredInR1(new Set());
       setIsFinished(false);
+      setIsRound1Completed(false);
+      localStorage.removeItem("eventRound1Completed");
     } catch (error: any) {
       console.error("Reset error:", error);
       alert("Failed to reset: " + error.message);
+    }
+  };
+
+  const setRound1Status = async (status: boolean) => {
+    try {
+      if (status) {
+        // Starting/Resuming Round 1
+        // Only set to 300 if it's currently 0 or near-zero (fresh start)
+        const updateData: any = { 
+          round1Enabled: true,
+          globalTimerActive: true
+        };
+        if (globalTimeLeft <= 0) {
+          updateData.globalTimeLeft = 300;
+        }
+        await setDoc(doc(db, "eventSettings", "metadata"), updateData, { merge: true });
+      } else {
+        // Stopping/Pausing
+        await setDoc(doc(db, "eventSettings", "metadata"), { 
+          round1Enabled: false,
+          globalTimerActive: false
+        }, { merge: true });
+      }
+      alert(`Round 1 status updated to: ${status ? "STARTED" : "STOPPED"}`);
+    } catch (error: any) {
+      alert("Error updating round status: " + error.message);
+    }
+  };
+
+  const adjustGlobalTimer = async (seconds: number) => {
+    try {
+      const newTime = Math.max(0, globalTimeLeft + seconds);
+      await setDoc(doc(db, "eventSettings", "metadata"), { globalTimeLeft: newTime }, { merge: true });
+    } catch (error: any) {
+      console.error("Timer adjustment error:", error);
+    }
+  };
+
+  const toggleGlobalTimer = async () => {
+    try {
+      await setDoc(doc(db, "eventSettings", "metadata"), { globalTimerActive: !globalTimerActive }, { merge: true });
+    } catch (error: any) {
+      console.error("Timer toggle error:", error);
     }
   };
 
@@ -968,32 +1225,58 @@ export default function EventPlatform() {
           <header className="flex flex-col md:flex-row justify-between items-start md:items-center mb-16 gap-8">
             <div className="text-left">
               <motion.h1 
-                initial={{ x: -20 }}
-                animate={{ x: 0 }}
-                className="text-7xl font-black italic uppercase text-gradient text-glow mb-2"
+                initial={{ x: -30, opacity: 0 }}
+                animate={{ x: 0, opacity: 1 }}
+                className="text-8xl font-black italic uppercase text-gradient text-glow mb-2 tracking-tighter"
               >
-                Dashboard
+                DASHBOARD_
               </motion.h1>
-              <p className="text-slate-500 font-bold tracking-[0.6em] uppercase text-[10px] opacity-70">Event Control & Analytics</p>
+              <p className="text-emerald-400 font-black tracking-[0.8em] uppercase text-[10px] ml-2">System Authority Level 01</p>
             </div>
             
-            <div className="flex flex-wrap gap-4">
+            <div className="flex flex-wrap gap-6">
               <motion.button
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
                 onClick={resetAllPoints}
-                className="btn-premium !bg-rose-600 !shadow-rose-600/20"
+                className="btn-premium !bg-rose-600/10 !text-rose-500 border border-rose-500/20 hover:!bg-rose-600 hover:!text-white shadow-none hover:shadow-rose-600/40"
               >
                 <RefreshCcw className="w-5 h-5" />
-                Reset Sessions
+                CLEAR_NODES
               </motion.button>
+              
+              <motion.button
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                onClick={() => setRound1Status(!round1Enabled)}
+                className={`btn-premium ${round1Enabled ? "!bg-amber-600 shadow-amber-600/40" : "!bg-emerald-600 shadow-emerald-600/40"}`}
+              >
+                <Play className="w-5 h-5 flex-shrink-0" />
+                {round1Enabled ? "SUSPEND ROUND 1" : "INITIATE ROUND 1"}
+              </motion.button>
+              
+              {round1Enabled && (
+                <div className="flex items-center gap-4 bg-slate-900/80 px-6 py-3 rounded-2xl border border-white/5 backdrop-blur-xl">
+                  <Timer className="w-6 h-6 text-emerald-400" />
+                  <span className="text-3xl font-black italic tabular-nums text-white min-w-[3ch]">
+                    {Math.floor(globalTimeLeft / 60).toString().padStart(2, '0')}:{(globalTimeLeft % 60).toString().padStart(2, '0')}
+                  </span>
+                  <div className="flex gap-2 ml-4">
+                    <button onClick={() => adjustGlobalTimer(60)} className="p-2 hover:bg-white/5 rounded-lg text-emerald-400 transition-colors"><Plus className="w-5 h-5" /></button>
+                    <button onClick={() => adjustGlobalTimer(-60)} className="p-2 hover:bg-white/5 rounded-lg text-rose-400 transition-colors"><Minus className="w-5 h-5" /></button>
+                    <button onClick={toggleGlobalTimer} className="p-2 hover:bg-white/10 rounded-lg text-amber-400 transition-all">
+                      {globalTimerActive ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5" />}
+                    </button>
+                  </div>
+                </div>
+              )}
               
               <button 
                 onClick={() => setView("role-selection")} 
-                className="btn-secondary"
+                className="btn-secondary !border-white/5 hover:!border-white/20"
               >
                 <LogOut className="w-5 h-5" />
-                Leave
+                EXIT
               </button>
             </div>
           </header>
@@ -1050,15 +1333,16 @@ export default function EventPlatform() {
             initial={{ y: 30, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
             transition={{ delay: 0.4 }}
-            className="glass rounded-[3rem] overflow-hidden"
+            className="glass rounded-[2rem] overflow-hidden border-white/5 shadow-2xl"
           >
-            <div className="p-10 border-b border-white/5 bg-white/[0.02] flex justify-between items-center">
-              <h2 className="text-3xl font-black italic tracking-tight text-white/90">
-                LIVE STANDINGS_
+            <div className="p-12 border-b border-white/5 bg-white/[0.01] flex justify-between items-center relative overflow-hidden">
+              <div className="absolute top-0 left-0 w-1.5 h-full bg-emerald-500" />
+              <h2 className="text-4xl font-black italic tracking-tighter text-white">
+                LIVE_LEADERBOARD
               </h2>
-              <div className="badge-live">
-                <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" />
-                Real-Time Data
+              <div className="badge-live !bg-emerald-500/5 !text-emerald-400 !border-emerald-500/20">
+                <span className="w-2 h-2 bg-emerald-400 rounded-full animate-ping" />
+                REALTIME_DATASTREAM
               </div>
             </div>
             
@@ -1069,6 +1353,7 @@ export default function EventPlatform() {
                     <th className="p-10">Rank</th>
                     <th className="p-10">Team Identity</th>
                     <th className="p-10 text-center">Score</th>
+                    <th className="p-10 text-center">Tab Deviations</th>
                     <th className="p-10">Status</th>
                     <th className="p-10 text-right">Actions</th>
                   </tr>
@@ -1085,17 +1370,24 @@ export default function EventPlatform() {
                         className="group hover:bg-white/[0.02] transition-colors"
                       >
                         <td className="p-10 text-center">
-                          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-indigo-500/5 border border-indigo-500/20 text-white font-black italic text-3xl shadow-lg shadow-indigo-500/5">
+                          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-emerald-500/5 border border-emerald-500/20 text-white font-black italic text-3xl shadow-lg shadow-emerald-500/5">
                             {i + 1}
                           </div>
                         </td>
                         <td className="p-10">
-                          <div className="font-black text-white text-2xl group-hover:text-indigo-400 transition-colors italic tracking-tight uppercase">{team.team}</div>
+                          <div className="font-black text-white text-2xl group-hover:text-emerald-400 transition-colors italic tracking-tight uppercase">{team.team}</div>
                         </td>
                         <td className="p-10">
                           <div className="flex justify-center">
-                            <span className="bg-white/5 px-8 py-3 rounded-2xl font-black text-2xl border border-white/5 group-hover:border-indigo-500/30 transition-all">
+                            <span className="bg-white/5 px-8 py-3 rounded-2xl font-black text-2xl border border-white/5 group-hover:border-emerald-500/30 transition-all">
                               {team.score}
+                            </span>
+                          </div>
+                        </td>
+                        <td className="p-10 text-center">
+                          <div className="flex justify-center">
+                            <span className={`px-6 py-2 rounded-xl font-black text-xl border ${team.tabSwitches > 3 ? 'bg-rose-500/10 border-rose-500/30 text-rose-500' : team.tabSwitches > 0 ? 'bg-amber-500/10 border-amber-500/30 text-amber-500' : 'bg-white/5 border-white/5 text-slate-500'}`}>
+                              {team.tabSwitches || 0}
                             </span>
                           </div>
                         </td>
@@ -1139,8 +1431,8 @@ export default function EventPlatform() {
       <div className="min-h-screen bg-fancy relative flex flex-col items-center justify-center p-6 bg-slate-950">
         {/* Subtle Overlays */}
         <div className="absolute inset-0 z-1 bg-gradient-to-b from-black/20 via-transparent to-black/60 pointer-events-none" />
-        <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-indigo-600/10 rounded-full blur-[120px] pointer-events-none" />
-        <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-rose-600/10 rounded-full blur-[120px] pointer-events-none" />
+        <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-emerald-600/10 rounded-full blur-[120px] pointer-events-none" />
+        <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-blue-600/10 rounded-full blur-[120px] pointer-events-none" />
 
         <motion.div 
           initial={{ y: 30, opacity: 0 }}
@@ -1152,7 +1444,7 @@ export default function EventPlatform() {
             animate={{ scale: 1, opacity: 1 }}
             className="inline-block mb-10 p-5 glass rounded-[2.5rem] border border-white/10"
           >
-            <div className="bg-gradient-to-br from-indigo-500 to-rose-500 p-4 rounded-2xl shadow-lg shadow-indigo-500/20">
+            <div className="bg-gradient-to-br from-emerald-500 to-blue-500 p-4 rounded-2xl shadow-lg shadow-emerald-500/20">
               <Award className="w-10 h-10 text-white" />
             </div>
           </motion.div>
@@ -1160,7 +1452,7 @@ export default function EventPlatform() {
           <h1 className="text-8xl md:text-9xl font-black mb-6 tracking-tight leading-none text-gradient text-glow italic">
             HACKandCRACK
           </h1>
-          <p className="text-indigo-300 font-bold tracking-[0.8em] uppercase text-xs mb-16 opacity-60">
+          <p className="text-emerald-300 font-bold tracking-[0.8em] uppercase text-xs mb-16 opacity-60">
             Grand Challenge_2026
           </p>
 
@@ -1168,40 +1460,40 @@ export default function EventPlatform() {
             {view === "role-selection" && (
               <motion.div 
                 key="roles"
-                initial={{ opacity: 0, y: 20 }}
+                initial={{ opacity: 0, y: 30 }}
                 animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -20 }}
-                className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-3xl mx-auto"
+                exit={{ opacity: 0, scale: 0.95 }}
+                className="grid grid-cols-1 md:grid-cols-2 gap-10 max-w-4xl mx-auto"
               >
                 <motion.button 
-                  whileHover={{ scale: 1.02 }}
+                  whileHover={{ y: -10, scale: 1.02 }}
                   whileTap={{ scale: 0.98 }}
                   onClick={() => setView("student-login")} 
-                  className="glass-card group text-left"
+                  className="glass-card group text-left !p-12 border-white/5 hover:border-emerald-500/20"
                 >
-                  <div className="p-4 bg-indigo-500/10 rounded-2xl w-fit mb-8 group-hover:bg-indigo-500 transition-all duration-500">
-                    <User className="w-8 h-8 text-indigo-400 group-hover:text-white" />
+                  <div className="p-5 bg-emerald-500/10 rounded-3xl w-fit mb-10 group-hover:bg-emerald-600 group-hover:shadow-[0_0_30px_rgba(16,185,129,0.4)] transition-all duration-500">
+                    <User className="w-10 h-10 text-emerald-400 group-hover:text-white" />
                   </div>
-                  <h3 className="text-4xl font-black mb-3 tracking-tight italic">Participant</h3>
-                  <p className="text-slate-400 font-medium leading-relaxed">Begin your journey, solve technical challenges, and climb the ranks.</p>
-                  <div className="flex items-center gap-2 mt-8 text-indigo-400 font-black uppercase text-xs tracking-widest group-hover:translate-x-2 transition-transform">
-                    Enter Arena <ChevronRight className="w-4 h-4" />
+                  <h3 className="text-5xl font-black mb-4 tracking-tight italic text-white group-hover:text-emerald-400 transition-colors">PARTICIPANT</h3>
+                  <p className="text-slate-400 text-lg leading-relaxed font-medium">Join the global arena, solve complex modules, and ascend the technical leaderboard.</p>
+                  <div className="flex items-center gap-3 mt-10 text-emerald-400 font-black uppercase text-sm tracking-[0.2em] group-hover:translate-x-3 transition-transform">
+                    ENTER ARENA <ChevronRight className="w-5 h-5" />
                   </div>
                 </motion.button>
 
                 <motion.button 
-                  whileHover={{ scale: 1.02 }}
+                  whileHover={{ y: -10, scale: 1.02 }}
                   whileTap={{ scale: 0.98 }}
                   onClick={() => setView("admin-login")} 
-                  className="glass-card group text-left border-white/5 hover:border-white/10"
+                  className="glass-card group text-left !p-12 border-white/5 hover:border-blue-500/20"
                 >
-                  <div className="p-4 bg-slate-800 rounded-2xl w-fit mb-8">
-                    <ShieldCheck className="w-8 h-8 text-slate-400" />
+                  <div className="p-5 bg-slate-800/50 rounded-3xl w-fit mb-10 group-hover:bg-blue-600 group-hover:shadow-[0_0_30px_rgba(59,130,246,0.4)] transition-all duration-500">
+                    <ShieldCheck className="w-10 h-10 text-slate-500 group-hover:text-white" />
                   </div>
-                  <h3 className="text-4xl font-black mb-3 opacity-60 tracking-tight italic">Dashboard</h3>
-                  <p className="text-slate-500 font-medium leading-relaxed">System administration and real-time event analytics.</p>
-                  <div className="flex items-center gap-2 mt-8 text-slate-600 font-black uppercase text-xs tracking-widest">
-                    Manage <ChevronRight className="w-4 h-4" />
+                  <h3 className="text-5xl font-black mb-4 tracking-tight italic opacity-40 group-hover:text-blue-500 group-hover:opacity-100 transition-all">ADMIN</h3>
+                  <p className="text-slate-500 text-lg leading-relaxed font-medium">Administrative control, real-time node monitoring, and system management.</p>
+                  <div className="flex items-center gap-3 mt-10 text-slate-600 font-black uppercase text-sm tracking-[0.2em] group-hover:text-blue-500 transition-colors">
+                    DASHBOARD <ChevronRight className="w-5 h-5" />
                   </div>
                 </motion.button>
               </motion.div>
@@ -1210,30 +1502,36 @@ export default function EventPlatform() {
             {view === "student-login" && (
               <motion.div 
                 key="student-login"
-                initial={{ opacity: 0, scale: 0.9 }}
+                initial={{ opacity: 0, scale: 0.95 }}
                 animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 1.1 }}
-                className="glass-card max-w-md mx-auto"
+                exit={{ opacity: 0, scale: 1.05 }}
+                className="glass-card max-w-lg mx-auto !p-16 border-emerald-500/10"
               >
-                <h2 className="text-4xl font-black mb-3 text-left tracking-tight italic">Welcome_</h2>
-                <p className="text-slate-400 text-left mb-10 font-medium">Please enter your team credentials to continue.</p>
+                <div className="text-left mb-12">
+                  <h2 className="text-5xl font-black mb-4 tracking-tighter italic text-white">ACCESSING_</h2>
+                  <p className="text-slate-400 font-medium text-lg">Initialize your team node to synchronize with the arena.</p>
+                </div>
                 
-                <div className="space-y-5">
-                  <div className="relative">
+                <div className="space-y-8">
+                  <div className="group">
+                    <div className="text-[10px] font-black text-emerald-400 uppercase tracking-[0.4em] mb-3 ml-2 group-focus-within:text-white transition-colors">Team_Identity</div>
                     <input
-                      placeholder="Team Name"
+                      placeholder="e.g. CyberKnights"
                       value={teamName}
-                      className="w-full px-6 py-5 bg-white/[0.03] rounded-2xl text-xl border border-white/5 focus:border-indigo-500/50 outline-none transition-all placeholder:text-slate-700 font-bold"
+                      className="w-full px-8 py-6 bg-slate-950/50 rounded-[1.5rem] text-2xl border border-white/5 focus:border-indigo-500/50 outline-none transition-all placeholder:text-slate-800 font-bold text-white"
                       onChange={e => setTeamName(e.target.value)}
+                      onKeyDown={e => e.key === 'Enter' && handleStudentLogin()}
                     />
                   </div>
-                  <div className="relative">
+                  <div className="group">
+                    <div className="text-[10px] font-black text-emerald-400 uppercase tracking-[0.4em] mb-3 ml-2 group-focus-within:text-white transition-colors">Secure_Passkey</div>
                     <input
-                      placeholder="Leader Name"
+                      placeholder="••••••••"
                       type="password"
                       value={leaderName}
-                      className="w-full px-6 py-5 bg-white/[0.03] rounded-2xl text-xl border border-white/5 focus:border-indigo-500/50 outline-none transition-all placeholder:text-slate-700 font-bold"
+                      className="w-full px-8 py-6 bg-slate-950/50 rounded-[1.5rem] text-2xl border border-white/5 focus:border-indigo-500/50 outline-none transition-all placeholder:text-slate-800 font-bold text-white"
                       onChange={e => setLeaderName(e.target.value)}
+                      onKeyDown={e => e.key === 'Enter' && handleStudentLogin()}
                     />
                   </div>
                   
@@ -1242,23 +1540,25 @@ export default function EventPlatform() {
                     whileTap={{ scale: 0.98 }}
                     onClick={handleStudentLogin}
                     disabled={isLoggingIn}
-                    className="btn-premium w-full mt-6 !py-6 disabled:opacity-50"
+                    className="btn-premium w-full mt-10 !py-8 text-xl shadow-emerald-500/40"
                   >
                     {isLoggingIn ? (
-                      <RefreshCcw className="w-6 h-6 animate-spin" />
+                      <RefreshCcw className="w-8 h-8 animate-spin" />
                     ) : (
-                      <>
-                        START CHALLENGE
-                        <ChevronRight className="w-5 h-5" />
-                      </>
+                      <div className="flex items-center gap-4">
+                        SYNCHRONIZE SESSION
+                        <ChevronRight className="w-6 h-6" />
+                      </div>
                     )}
                   </motion.button>
                   
                   <button 
                     onClick={() => setView("role-selection")} 
-                    className="w-full text-slate-500 font-black uppercase text-[10px] tracking-[0.3em] hover:text-white transition-colors py-4"
+                    className="w-full text-slate-500 font-black uppercase text-xs tracking-[0.4em] hover:text-white transition-colors pt-8 flex items-center justify-center gap-4 group"
                   >
-                    ← Go Back
+                    <div className="w-8 h-[1px] bg-slate-800 group-hover:bg-white transition-colors" />
+                    DISCONNECT
+                    <div className="w-8 h-[1px] bg-slate-800 group-hover:bg-white transition-colors" />
                   </button>
                 </div>
               </motion.div>
@@ -1267,36 +1567,43 @@ export default function EventPlatform() {
             {view === "admin-login" && (
               <motion.div 
                 key="admin-login"
-                initial={{ opacity: 0, scale: 0.9 }}
+                initial={{ opacity: 0, scale: 0.95 }}
                 animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 1.1 }}
-                className="glass-card max-w-sm mx-auto"
+                exit={{ opacity: 0, scale: 1.05 }}
+                className="glass-card max-w-sm mx-auto !p-12 border-blue-500/10"
               >
-                <h2 className="text-4xl font-black mb-8 text-left italic">Auth_</h2>
+                <div className="text-left mb-10">
+                  <h2 className="text-4xl font-black mb-3 tracking-tighter italic text-white flex items-center gap-4">
+                    ADMIN_
+                    <ShieldCheck className="w-6 h-6 text-blue-500" />
+                  </h2>
+                  <p className="text-slate-500 font-medium">Verify system authority.</p>
+                </div>
                 
                 <div className="space-y-6">
                   <input
                     type="password"
-                    placeholder="Admin Password"
+                    placeholder="System Passkey"
                     value={inputAdminPass}
-                    className="w-full px-6 py-5 bg-white/[0.03] rounded-2xl text-xl border border-white/5 focus:border-indigo-500/50 outline-none transition-all placeholder:text-slate-700 font-bold"
+                    className="w-full px-6 py-5 bg-slate-950/50 rounded-2xl text-xl border border-white/5 focus:border-blue-500/50 outline-none transition-all placeholder:text-slate-800 font-bold text-white"
                     onChange={e => setInputAdminPass(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && handleAdminLogin()}
                   />
                   
                   <motion.button
                     whileHover={{ scale: 1.02 }}
                     whileTap={{ scale: 0.98 }}
                     onClick={handleAdminLogin}
-                    className="btn-premium w-full !bg-slate-100 !text-slate-900 shadow-white/10"
+                    className="btn-premium w-full !bg-blue-600 shadow-blue-500/30 !py-6 text-lg"
                   >
-                    UNLOCK DASHBOARD
+                    AUTHORIZE
                   </motion.button>
                   
                   <button 
                     onClick={() => setView("role-selection")} 
-                    className="w-full text-slate-500 font-black uppercase text-[10px] tracking-[0.3em] hover:text-white transition-colors"
+                    className="w-full text-slate-600 font-black uppercase text-[10px] tracking-[0.3em] hover:text-white transition-colors"
                   >
-                    ← Back
+                    ABORT_
                   </button>
                 </div>
               </motion.div>
@@ -1309,46 +1616,67 @@ export default function EventPlatform() {
 
   if (isFinished) {
     return (
-      <div className="min-h-screen bg-fancy flex items-center justify-center p-6 bg-slate-950 text-white">
+      <div className="min-h-screen bg-fancy flex items-center justify-center p-8 bg-slate-950 text-white relative overflow-hidden">
+        <div className="absolute inset-0 bg-emerald-500/5 blur-[120px] rounded-full scale-150" />
         <motion.div 
-          initial={{ scale: 0.8, opacity: 0 }}
+          initial={{ scale: 0.9, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
-          className="glass-card max-w-2xl w-full text-center !p-20 border border-white/10"
+          className="glass-card max-w-2xl w-full text-center !p-24 border border-emerald-500/10 shadow-[0_0_100px_rgba(16,185,129,0.1)] relative z-10"
         >
           <motion.div
             animate={{ 
-              rotate: [0, 10, -10, 10, 0],
-              scale: [1, 1.1, 1]
+              rotate: [0, 5, -5, 5, 0],
+              scale: [1, 1.05, 1]
             }}
-            transition={{ repeat: Infinity, duration: 4 }}
-            className="inline-block mb-10 p-8 glass rounded-[3rem] border border-white/5"
+            transition={{ repeat: Infinity, duration: 6, ease: "easeInOut" }}
+            className="inline-block mb-12 p-10 glass rounded-[4rem] border border-white/5 relative"
           >
-            <Trophy className="w-24 h-24 text-yellow-500 accent-glow shadow-2xl" />
+            <Trophy className="w-28 h-28 text-emerald-400 accent-glow shadow-2xl" />
+            <div className="absolute inset-0 bg-emerald-500/10 blur-2xl rounded-full" />
           </motion.div>
           
-          <h1 className="text-7xl font-black mb-6 text-gradient italic tracking-tight">CONGRATULATIONS!</h1>
-          <p className="text-3xl text-slate-300 font-bold mb-10 italic leading-tight">
-            You have successfully completed all challenges.
+          <h1 className="text-8xl font-black mb-6 text-gradient italic tracking-tighter uppercase text-glow">VICTORY_</h1>
+          <p className="text-3xl text-slate-400 font-bold mb-12 italic leading-tight tracking-tight">
+            Node successfully synchronized. <br/>Challenge requirements satisfied.
           </p>
           
-          <div className="bg-white/[0.03] p-10 rounded-3xl border border-white/5 mb-12">
-            <p className="text-slate-500 font-black uppercase tracking-[0.4em] text-[10px] mb-4">Final Standing Score</p>
-            <div className="text-8xl font-black text-indigo-400 text-glow">{score}</div>
+          <div className="bg-slate-950/50 p-12 rounded-[2.5rem] border border-white/5 mb-16 shadow-inner">
+            <p className="text-slate-600 font-black uppercase tracking-[0.6em] text-[10px] mb-4 opacity-60">Final_Cumulative_Score</p>
+            <div className="text-9xl font-black text-emerald-400 text-glow tracking-tighter">{score}</div>
           </div>
 
-          <p className="text-slate-400 font-medium mb-12 leading-relaxed">
-            Your results have been synchronized with the main server. <br/>
-            Thank you for participating in HACKandCRACK 2026.
-          </p>
-
           <motion.button 
-            whileHover={{ scale: 1.05 }}
+            whileHover={{ scale: 1.05, y: -5 }}
             whileTap={{ scale: 0.95 }}
             onClick={handleLogout}
-            className="btn-premium !bg-white !text-slate-900 !px-20 text-lg shadow-white/10"
+            className="btn-premium !bg-emerald-600 !px-24 !py-10 text-2xl shadow-emerald-500/40"
           >
-            QUIT SESSION
+            TERMINATE SESSION
           </motion.button>
+        </motion.div>
+      </div>
+    );
+  }
+
+  if (isRound1Completed) {
+    return (
+      <div className="min-h-screen bg-fancy flex items-center justify-center p-8 bg-slate-950 text-white relative">
+        <motion.div 
+          initial={{ scale: 0.95, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          className="glass-card max-w-2xl w-full text-center !p-24 border border-emerald-500/10 shadow-2xl"
+        >
+          <div className="inline-block mb-12 p-10 glass rounded-[4rem] border border-white/5">
+            <Award className="w-28 h-28 text-emerald-400 accent-glow shadow-2xl" />
+          </div>
+          <h1 className="text-7xl font-black mb-8 text-gradient italic tracking-tighter uppercase text-glow">PHASE_01_COMPLETE</h1>
+          <p className="text-3xl text-slate-400 font-bold mb-12 italic leading-tight">
+            Analytical logic modules finished. <br/>Stand by for synthetic phase authorization.
+          </p>
+          <div className="bg-slate-950/50 p-12 rounded-[2.5rem] border border-white/5 mb-8">
+            <p className="text-slate-600 font-black uppercase tracking-[0.6em] text-[10px] mb-4 opacity-60">Phase_01_Score</p>
+            <div className="text-8xl font-black text-emerald-400 text-glow tracking-tighter">{score}</div>
+          </div>
         </motion.div>
       </div>
     );
@@ -1357,41 +1685,70 @@ export default function EventPlatform() {
   if (showRoundIntro) {
     const isR1 = round === 1;
     return (
-      <div className="min-h-screen bg-fancy flex items-center justify-center p-6 bg-slate-950 text-white">
+      <div className="min-h-screen bg-fancy flex items-center justify-center p-8 bg-slate-950 text-white relative">
         <motion.div 
           initial={{ y: 50, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
-          className="glass-card max-w-3xl w-full text-center !p-20 border border-indigo-500/10"
+          className="glass-card max-w-4xl w-full text-center !p-24 border border-emerald-500/10 shadow-2xl"
         >
-          <div className="flex justify-center mb-10">
-            <div className="p-8 bg-indigo-500/10 rounded-[3rem] border border-indigo-500/20 relative">
-              {isR1 ? <Award className="w-20 h-20 text-indigo-400" /> : <Code2 className="w-20 h-20 text-indigo-400" />}
-              <div className="absolute -top-2 -right-2 w-6 h-6 bg-indigo-500 rounded-full animate-ping" />
+          <div className="flex justify-center mb-12">
+            <div className="p-10 bg-emerald-500/5 rounded-[4rem] border border-emerald-500/10 relative">
+              {isR1 ? <Award className="w-24 h-24 text-emerald-400" /> : <Code2 className="w-24 h-24 text-emerald-400" />}
+              <div className="absolute -top-3 -right-3 w-8 h-8 bg-emerald-500 rounded-full animate-ping opacity-20" />
             </div>
           </div>
           
-          <p className="text-slate-500 font-black tracking-[0.6em] uppercase text-xs mb-4">Module Preparation</p>
-          <h1 className="text-8xl font-black mb-8 text-gradient italic tracking-tighter">ROUND 0{round}</h1>
+          <p className="text-emerald-400 font-black tracking-[0.8em] uppercase text-[10px] mb-5 opacity-40">System_Initialization_v1.0.4</p>
+          <h1 className="text-9xl font-black mb-10 text-gradient italic tracking-tighter uppercase text-glow">PHASE_0{round}</h1>
           
-          <div className="bg-white/[0.03] p-10 rounded-3xl border border-white/5 mb-12 text-left">
-            <h3 className="text-2xl font-black text-indigo-400 italic mb-4 uppercase tracking-tight">
-              {isR1 ? "Phase 01: Analytical Logic" : "Phase 02: Code Execution"}
+          <div className="bg-slate-950/60 p-12 rounded-[3rem] border border-white/5 mb-16 text-left relative overflow-hidden">
+            <div className="absolute top-0 right-0 p-8 opacity-5">
+              <Terminal className="w-32 h-32" />
+            </div>
+            <h3 className="text-3xl font-black text-emerald-400 italic mb-6 uppercase tracking-tighter">
+              {isR1 ? "01: Analytical Neural Patterns" : "02: Synthetic Logic Deployment"}
             </h3>
-            <p className="text-xl text-slate-400 leading-relaxed font-medium italic">
+            <p className="text-2xl text-slate-400 leading-relaxed font-medium italic">
               {isR1 
-                ? "In this phase, you must identify logical deviations and patterns. Speed and accuracy are critical for the global leaderboard." 
-                : "The focus shifts to technical implementation. Deploy Python solutions to solve the given challenges."}
+                ? "In this phase, you must decode complex structural deviations. Latency and accuracy are critical for global synchronization." 
+                : "Manual implementation required. Deploy high-level Python protocols to solve the objective."}
             </p>
           </div>
 
-          <motion.button 
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            onClick={() => setShowRoundIntro(false)}
-            className="btn-premium !bg-indigo-600 !px-24 !py-8 text-2xl shadow-indigo-500/40"
-          >
-            START MODULE
-          </motion.button>
+          {round1Enabled && isR1 && (
+            <motion.button 
+              whileHover={{ scale: 1.05, y: -5 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={() => {
+                setIsQuestionTimerActive(true);
+                setQuestionTimeLeft(30);
+                localStorage.setItem("eventQTimeLeft", "30");
+                localStorage.setItem("eventQTimerActive", "true");
+              }}
+              className="btn-premium !bg-emerald-600 !px-32 !py-10 text-3xl shadow-emerald-500/40 tracking-tighter italic"
+            >
+              INITIALIZE_LOGIC
+            </motion.button>
+          )}
+
+          {!round1Enabled && isR1 && (
+            <div className="bg-amber-500/5 border border-amber-500/10 p-10 rounded-[2.5rem] mt-10">
+              <p className="text-amber-500 font-black uppercase text-sm tracking-[0.5em] animate-pulse italic">
+                Awaiting System Authorization...
+              </p>
+            </div>
+          )}
+
+          {!isR1 && (
+            <motion.button 
+              whileHover={{ scale: 1.05, y: -5 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={() => setShowRoundIntro(false)}
+              className="btn-premium !bg-emerald-600 !px-32 !py-10 text-3xl shadow-emerald-500/40 tracking-tighter italic"
+            >
+              DEPLOY_CODE
+            </motion.button>
+          )}
         </motion.div>
       </div>
     );
@@ -1402,49 +1759,52 @@ export default function EventPlatform() {
     <motion.div 
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
-      className="min-h-screen bg-fancy bg-slate-950 p-6 md:p-10 flex flex-col items-center"
+      className="min-h-screen bg-fancy bg-slate-950 p-6 md:p-10 flex flex-col items-center relative"
     >
+      {round === 1 && !round1Enabled && !isRound1Completed && (
+        <div className="absolute inset-0 z-[100] flex items-center justify-center backdrop-blur-xl bg-slate-950/80 transition-all duration-700">
+          <motion.div 
+            initial={{ scale: 0.95, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            className="glass p-20 rounded-[4rem] text-center max-w-2xl border-2 border-amber-500/20 shadow-[0_0_80px_rgba(245,158,11,0.1)]"
+          >
+            <div className="flex justify-center mb-10">
+              <div className="p-8 bg-amber-500/10 rounded-[3rem] border border-amber-500/20">
+                <RefreshCcw className="w-20 h-20 text-amber-500 animate-[spin_4s_linear_infinite]" />
+              </div>
+            </div>
+            <h2 className="text-7xl font-black text-amber-500 italic uppercase mb-8 tracking-tighter text-glow">NODE_IDLE</h2>
+            <p className="text-2xl text-slate-400 font-medium leading-relaxed italic">
+              System access temporarily suspended by the system administrator. <br/>
+              Security tokens retained. Stand by for resumption.
+            </p>
+          </motion.div>
+        </div>
+      )}
+
       <div className="w-full max-w-7xl">
-        <header className="glass rounded-[2rem] p-8 mb-10 flex flex-col md:flex-row justify-between items-center gap-6 relative overflow-hidden group">
-          <div className="absolute top-0 left-0 w-1.5 h-full bg-indigo-500" />
+        <header className="glass rounded-[2rem] p-10 mb-12 flex flex-col md:flex-row justify-between items-center gap-10 relative overflow-hidden group border-white/5 shadow-2xl">
+          <div className="absolute top-0 left-0 w-1.5 h-full bg-emerald-500 shadow-[0_0_20px_rgba(16,185,129,0.4)]" />
           <div className="flex-1 flex items-center gap-8">
-            <div className="p-4 bg-indigo-500/10 rounded-2xl">
-              <User className="w-8 h-8 text-indigo-400" />
+            <div className="p-5 bg-emerald-500/10 rounded-2xl border border-emerald-500/10">
+              <User className="w-10 h-10 text-emerald-400" />
             </div>
             <div className="text-left">
-              <h2 className="text-4xl font-black text-white tracking-tight flex items-center gap-4 italic uppercase">
+              <h2 className="text-5xl font-black text-white tracking-tighter flex items-center gap-4 italic uppercase">
                 {teamName}
-                <div className="badge-live !bg-indigo-500/10 !text-indigo-400 !border-indigo-500/20">Active Session</div>
+                <div className="badge-live !bg-emerald-500/5 !text-emerald-400 !border-emerald-500/20">NODE_ACTIVE</div>
               </h2>
-              <p className="text-slate-500 text-xs font-black uppercase tracking-[0.4em] mt-2 opacity-60">Lead: {leaderName}</p>
+              <p className="text-slate-500 font-black uppercase tracking-[0.6em] mt-2 text-[10px] opacity-60">Session_Lead: {leaderName}</p>
             </div>
           </div>
 
-          <div className="flex-1 flex justify-center order-first md:order-none">
-            <div className="text-center relative">
-              <div className="absolute -top-6 left-1/2 -translate-x-1/2 text-[10px] font-black text-indigo-500/40 tracking-[0.8em] uppercase whitespace-nowrap">
-                Current_Phase
-              </div>
-              <motion.div 
-                key={round}
-                initial={{ y: 10, opacity: 0 }}
-                animate={{ y: 0, opacity: 1 }}
-                className="text-6xl font-black italic text-gradient tracking-tighter"
-              >
-                ROUND 0{round}
-              </motion.div>
-              <div className="text-slate-500 text-[10px] font-black tracking-[0.4em] uppercase mt-1 opacity-40">
-                {round === 1 ? "Analytical Logic" : "Code Execution"}
-              </div>
-            </div>
-          </div>
           
-          <div className="flex-1 flex items-center justify-end gap-10">
+          <div className="flex-1 flex items-center justify-end gap-12">
             <div className="text-right">
-              <p className="text-slate-500 text-[10px] font-black uppercase tracking-[0.3em] mb-2">Current Standing</p>
-              <div className="text-5xl font-black text-white flex items-center gap-4">
-                <span className="text-indigo-400 text-glow">{score}</span>
-                <Trophy className="w-7 h-7 text-rose-500 accent-glow" />
+              <p className="text-slate-500 text-[10px] font-black uppercase tracking-[0.4em] mb-3 opacity-60">Standing_Score</p>
+              <div className="text-6xl font-black text-white flex items-center gap-5">
+                <span className="text-emerald-400 text-glow">{score}</span>
+                <Trophy className="w-8 h-8 text-blue-500 accent-glow shadow-blue-500/20" />
               </div>
             </div>
             
@@ -1452,50 +1812,60 @@ export default function EventPlatform() {
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
               onClick={handleLogout}
-              className="btn-secondary !text-rose-500 !border-rose-500/10 hover:!border-rose-500/30"
+              className="btn-secondary !text-rose-500 !border-rose-500/10 hover:!border-rose-500/50 !px-6 !py-4"
             >
-              <LogOut className="w-4 h-4" />
-              Leave
+              <LogOut className="w-5 h-5" />
+              ABORT
             </motion.button>
           </div>
         </header>
+
 
         <AnimatePresence mode="wait">
           {round === 1 ? (
             <motion.div 
               key="round1"
-              initial={{ x: 20, opacity: 0 }}
+              initial={{ x: 30, opacity: 0 }}
               animate={{ x: 0, opacity: 1 }}
-              exit={{ x: -20, opacity: 0 }}
-              className="glass-card !p-10 md:!p-14 text-center relative overflow-hidden"
+              exit={{ x: -30, opacity: 0 }}
+              className="glass-card !p-12 md:!p-16 text-center relative overflow-hidden border-emerald-500/10"
             >
-            <div className="absolute top-0 right-0 p-8">
-                <div className="text-slate-600 text-[10px] font-black uppercase tracking-[0.5em] mb-1">Module 01</div>
-                <div className="text-indigo-400 text-2xl font-black italic uppercase tracking-tighter">Logic_Test</div>
-              </div>
-
-              <div className="max-w-4xl mx-auto">
-                <motion.div
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  className="inline-flex items-center gap-3 bg-rose-500/10 text-rose-500 px-5 py-2 rounded-full text-[10px] font-black uppercase tracking-[0.2em] mb-6 border border-rose-500/20"
-                >
-                  <Award className="w-4 h-4" />
-                  Challenge: Identify the Deviation
-                </motion.div>
+              <div className="max-w-5xl mx-auto">
+                <div className="flex flex-col items-center gap-6 mb-12">
+                  <div className="flex items-center gap-4 bg-emerald-500/5 text-emerald-400 px-6 py-3 rounded-full text-[10px] font-black uppercase tracking-[0.3em] border border-emerald-500/20">
+                    <Award className="w-5 h-5 flex-shrink-0" />
+                    OBJECTIVE: Identify Structural Deviations
+                  </div>
+                </div>
                 
-                <h3 className="text-3xl md:text-4xl mb-12 font-black leading-tight text-white tracking-tight italic">
-                  {currentQ.text}
-                </h3>
+                <div className="flex flex-col md:flex-row items-center justify-between gap-12 mb-16 text-left">
+                  <h3 className="text-2xl md:text-4xl font-black leading-tight text-white tracking-tighter italic text-glow flex-1">
+                    {currentQ.text}
+                  </h3>
+                  
+                  <div className={`flex-shrink-0 w-24 h-24 md:w-32 md:h-32 rounded-full border-[4px] flex items-center justify-center transition-all duration-300 shadow-2xl relative overflow-hidden ${
+                    questionTimeLeft <= 3 ? 'border-rose-500 shadow-rose-500/40 bg-rose-500/10' : 'border-emerald-500/20 shadow-emerald-500/20 bg-emerald-500/5'
+                  }`}>
+                    <div className={`text-4xl md:text-6xl font-black italic tabular-nums tracking-tighter text-glow ${
+                      questionTimeLeft <= 3 ? 'text-rose-500 animate-pulse' : 'text-emerald-400'
+                    }`}>
+                      {questionTimeLeft}
+                    </div>
+                    {/* Subtle spinning accent for the circle */}
+                    <div className={`absolute inset-0 border-t-4 border-transparent rounded-full animate-spin transition-colors ${
+                      questionTimeLeft <= 3 ? 'border-rose-500/40' : 'border-emerald-500/40'
+                    }`} style={{ animationDuration: '2s' }} />
+                  </div>
+                </div>
                 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                   {currentQ.options.map((o, i) => (
                     <motion.button
                       key={o + i}
                       initial={{ y: 20, opacity: 0 }}
                       animate={{ y: 0, opacity: 1 }}
                       transition={{ delay: i * 0.1 }}
-                      whileHover={{ scale: 1.02, translateY: -5 }}
+                      whileHover={{ scale: 1.02, y: -8 }}
                       whileTap={{ scale: 0.98 }}
                       onClick={() => {
                         const alreadyAnswered = answeredInR1.has(currentQ.id);
@@ -1513,16 +1883,16 @@ export default function EventPlatform() {
 
                           const nextIndex = currentQIndex + 1;
                           if (nextIndex < 30) {
+                            setQuestionTimeLeft(30);
                             setCurrentQIndex(nextIndex);
                             localStorage.setItem("eventQIndex", nextIndex.toString());
                             syncProgress({ score: newScore, qIndex: nextIndex, answered: answeredArr });
                           } else {
-                            setRound(2);
-                            setCurrentQIndex(0);
-                            localStorage.setItem("eventRound", "2");
-                            localStorage.setItem("eventQIndex", "0");
-                            setShowRoundIntro(true);
-                            syncProgress({ score: newScore, round: 2, qIndex: 0, answered: answeredArr });
+                            setIsTimerActive(false);
+                            localStorage.setItem("eventTimerActive", "false");
+                            setIsRound1Completed(true);
+                            localStorage.setItem("eventRound1Completed", "true");
+                            syncProgress({ score: newScore, answered: answeredArr });
                           }
                         } else {
                           const nextIndex = currentQIndex + 1;
@@ -1531,21 +1901,20 @@ export default function EventPlatform() {
                             localStorage.setItem("eventQIndex", nextIndex.toString());
                             syncProgress({ qIndex: nextIndex });
                           } else {
-                            setRound(2);
-                            setCurrentQIndex(0);
-                            localStorage.setItem("eventRound", "2");
-                            localStorage.setItem("eventQIndex", "0");
-                            setShowRoundIntro(true);
-                            syncProgress({ round: 2, qIndex: 0 });
+                            setIsTimerActive(false);
+                            localStorage.setItem("eventTimerActive", "false");
+                            setIsRound1Completed(true);
+                            localStorage.setItem("eventRound1Completed", "true");
                           }
                         }
                       }}
-                      className="glass !bg-white/[0.02] p-8 rounded-[2rem] text-xl font-black hover:!bg-indigo-600/10 hover:border-indigo-500/40 transition-all border border-white/5 group relative overflow-hidden text-center italic"
+                      className="glass !bg-white/[0.01] p-10 rounded-[2.5rem] text-2xl font-black hover:!bg-emerald-600/10 hover:border-emerald-500/40 transition-all border border-white/5 group relative overflow-hidden text-center italic"
                     >
-                      <div className="absolute top-5 left-8 text-[10px] font-black text-slate-700 group-hover:text-indigo-400 transition-colors uppercase tracking-[0.4em]">
-                        Choice_{i + 1}
+                      <div className="absolute top-6 left-10 text-[9px] font-black text-slate-800 group-hover:text-emerald-400/60 transition-colors uppercase tracking-[0.5em]">
+                        Choice_0{i + 1}
                       </div>
-                      <span className="relative z-10 text-white group-hover:text-glow transition-all">{o}</span>
+                      <span className="relative z-10 text-white group-hover:text-glow transition-all tracking-tight">{o}</span>
+                      <div className="absolute inset-0 bg-emerald-600/0 group-hover:bg-emerald-600/5 transition-colors" />
                     </motion.button>
                   ))}
                 </div>
@@ -1560,110 +1929,123 @@ export default function EventPlatform() {
             >
               <div className="flex flex-col gap-10 w-full">
                 <motion.div 
-                  initial={{ x: -20, opacity: 0 }}
+                  initial={{ x: -30, opacity: 0 }}
                   animate={{ x: 0, opacity: 1 }}
-                  className="glass-card border-indigo-500/10 relative overflow-hidden"
+                  className="glass-card border-blue-500/10 relative overflow-hidden !p-12"
                 >
-                  <div className="absolute top-[-20%] right-[-10%] opacity-5 rotate-12">
-                    <Code2 className="w-64 h-64" />
+                  <div className="absolute top-[-10%] right-[-5%] opacity-10 rotate-12 scale-150 pointer-events-none">
+                    <Code2 className="w-64 h-64 text-blue-500" />
                   </div>
-                  <div className="flex items-center gap-4 mb-8">
-                    <div className="p-2 bg-indigo-500/20 rounded-lg">
-                      <ChevronRight className="w-4 h-4 text-indigo-400" />
+                  <div className="flex items-center gap-6 mb-10">
+                    <div className="p-4 bg-blue-500/10 rounded-2xl border border-blue-500/20">
+                      <ChevronRight className="w-6 h-6 text-blue-400" />
                     </div>
-                    <span className="text-indigo-400 font-black uppercase text-[10px] tracking-[0.3em]">Problem Definition</span>
+                    <span className="text-blue-400 font-black uppercase text-[10px] tracking-[0.6em] opacity-60">Synthesize_Code</span>
                   </div>
-                  <h3 className="text-5xl font-black text-white mb-8 italic text-left tracking-tight">{currentQ.title}</h3>
-                  <div className="bg-white/[0.03] p-10 rounded-[2.5rem] border border-white/5">
+                  <h3 className="text-5xl font-black text-white mb-10 italic text-left tracking-tighter text-glow underline decoration-blue-500/30 decoration-4 underline-offset-8">{currentQ.title}</h3>
+                  <div className="bg-slate-950/50 p-12 rounded-[2.5rem] border border-white/5 shadow-inner">
                     <p className="text-2xl text-slate-300 leading-relaxed font-medium italic text-left">
                       "{currentQ.codingPrompt}"
                     </p>
                   </div>
                 </motion.div>
 
-                <div className="flex-1 flex flex-col gap-6">
-                  <div className="flex justify-between items-center px-6">
-                    <div className="flex items-center gap-3">
-                      <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" />
-                      <span className="text-[10px] font-black text-slate-500 uppercase tracking-[0.3em]">Execution Console</span>
+                <div className="flex-1 flex flex-col gap-8">
+                  <div className="flex justify-between items-center px-10">
+                    <div className="flex items-center gap-4">
+                      <div className="w-2 h-2 bg-emerald-500 rounded-full animate-ping shadow-[0_0_10px_rgba(16,185,129,0.8)]" />
+                      <span className="text-[10px] font-black text-slate-600 uppercase tracking-[0.5em] italic">Stream_Terminal/v1.0</span>
                     </div>
                   </div>
-                  <div className="glass rounded-[3rem] p-10 h-full min-h-[300px] font-mono text-2xl relative bg-black/60 overflow-hidden border-indigo-500/5">
-                    <div className="absolute top-5 left-10 text-[9px] text-slate-700 font-black uppercase tracking-[0.4em]">Ready_To_Process...</div>
-                    <div className="text-white/90 whitespace-pre-wrap mt-6 leading-relaxed text-left">
+                  <div className="glass rounded-[3rem] p-12 h-full min-h-[350px] font-mono text-2xl relative bg-black/80 overflow-hidden border-white/5 shadow-2xl flex flex-col justify-end">
+                    <div className="absolute top-8 left-12 text-[10px] text-slate-800 font-black uppercase tracking-[0.6em] border-b border-white/5 pb-2">Ready_Buffer</div>
+                    <div className="text-white/80 whitespace-pre-wrap mt-10 leading-relaxed text-left flex-1 font-['JetBrains_Mono']">
                       {output || (
-                        <span className="text-slate-800 animate-pulse italic">Awaiting deployment.</span>
+                        <span className="text-slate-800 animate-pulse italic uppercase tracking-widest text-sm">Awaiting_Instructions...</span>
                       )}
                     </div>
                     {isSolved && (
                       <motion.div 
-                        initial={{ scale: 0.9, opacity: 0 }}
-                        animate={{ scale: 1, opacity: 1 }}
-                        className="mt-10 flex items-center gap-4 text-emerald-400 font-black italic bg-emerald-400/10 p-6 rounded-[2rem] border border-emerald-400/20 shadow-lg shadow-emerald-500/5"
+                        initial={{ y: 20, opacity: 0 }}
+                        animate={{ y: 0, opacity: 1 }}
+                        className="mt-12 flex items-center gap-6 text-emerald-400 font-black italic bg-emerald-500/5 p-8 rounded-[2rem] border border-emerald-500/20 shadow-[0_0_40px_rgba(16,185,129,0.1)] transition-all"
                       >
-                        <ShieldCheck className="w-7 h-7" />
-                        COMPLETED: Output matches requirements.
+                        <ShieldCheck className="w-10 h-10 flex-shrink-0" />
+                        <div className="flex flex-col">
+                          <span className="text-[9px] uppercase tracking-[0.3em] text-emerald-500/60 mb-1">Status_Confirmed</span>
+                          <span className="text-xl">MODULAR_MATCH: SUCCESSFUL_EXECUTION</span>
+                        </div>
                       </motion.div>
                     )}
                   </div>
                 </div>
               </div>
 
-              <div className="flex flex-col gap-8 w-full">
-                <div className="h-[600px] glass rounded-[3rem] overflow-hidden border-2 border-white/5 relative shadow-2xl">
-                  <div className="absolute top-0 left-0 w-full p-5 glass !bg-slate-950/80 border-none border-b border-white/5 flex justify-between items-center px-10 z-20">
-                    <div className="flex items-center gap-4">
-                      <Cpu className="w-5 h-5 text-indigo-400" />
-                      <span className="text-[10px] font-black tracking-[0.3em] uppercase text-slate-500 italic">Playground : Python</span>
+              <div className="flex flex-col gap-10 w-full">
+                <div className="h-[650px] glass rounded-[3rem] overflow-hidden border border-white/5 relative shadow-2xl group/editor">
+                  <div className="absolute top-0 left-0 w-full p-6 glass !bg-slate-950/90 border-none border-b border-white/5 flex justify-between items-center px-12 z-20">
+                    <div className="flex items-center gap-6">
+                      <div className="p-2 bg-emerald-500/10 rounded-lg">
+                        <Cpu className="w-5 h-5 text-emerald-400" />
+                      </div>
+                      <span className="text-[10px] font-black tracking-[0.4em] uppercase text-slate-500 italic">Playground_v3 : Python_3.12</span>
                     </div>
-                    <div className="flex gap-2">
-                      <div className="w-3 h-3 rounded-full bg-slate-800" />
-                      <div className="w-3 h-3 rounded-full bg-slate-800" />
-                      <div className="w-3 h-3 rounded-full bg-indigo-500/20" />
+                    <div className="flex gap-3">
+                      <div className="w-3 h-3 rounded-full bg-slate-900 border border-white/5" />
+                      <div className="w-3 h-3 rounded-full bg-slate-900 border border-white/5" />
+                      <div className="w-3 h-3 rounded-full bg-emerald-500/20 shadow-[0_0_10px_rgba(16,185,129,0.2)]" />
                     </div>
                   </div>
-                  <div className="pt-16 h-full relative z-10">
+                  <div className="pt-20 h-full relative z-10 bg-slate-950/40">
                     <Editor
                       height="100%"
                       defaultLanguage="python"
                       theme="vs-dark"
                       value={code}
                       options={{
-                        fontSize: 20,
+                        fontSize: 22,
                         fontFamily: "'JetBrains Mono', monospace",
                         minimap: { enabled: false },
-                        padding: { top: 30, bottom: 30 },
+                        padding: { top: 40, bottom: 40 },
                         smoothScrolling: true,
-                        cursorBlinking: "phase",
+                        cursorBlinking: "smooth",
                         lineNumbers: "on",
                         glyphMargin: false,
-                        folding: false,
+                        folding: true,
                         lineDecorationsWidth: 0,
-                        lineNumbersMinChars: 0,
+                        lineNumbersMinChars: 3,
                         scrollbar: {
                           vertical: 'hidden',
                           horizontal: 'hidden'
-                        }
+                        },
+                        bracketPairColorization: { enabled: true },
+                        guides: { indentation: true },
+                        renderLineHighlight: "all",
+                        lineHeight: 32
                       }}
                       onChange={v => setCode(v || "")}
                     />
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
                   <motion.button
                     whileHover={{ scale: 1.02 }}
                     whileTap={{ scale: 0.98 }}
                     onClick={runCode}
                     disabled={isRunning}
-                    className="md:col-span-3 btn-premium flex items-center justify-center gap-5 !py-8 !rounded-[2.5rem] shadow-indigo-500/20"
+                    className="md:col-span-3 btn-premium flex items-center justify-center gap-6 !py-10 !rounded-[3rem] shadow-emerald-500/30 overflow-hidden relative group"
                   >
+                    <div className="absolute inset-0 bg-white/5 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none" />
                     {isRunning ? (
-                      <RefreshCcw className="w-8 h-8 animate-spin" />
+                      <div className="flex items-center gap-4">
+                        <RefreshCcw className="w-10 h-10 animate-spin" />
+                        <span className="text-3xl font-black italic">PROCESSING...</span>
+                      </div>
                     ) : (
                       <>
-                        <Play className="w-8 h-8 text-white accent-glow" />
-                        <span className="text-4xl font-black italic tracking-tighter">EXECUTE</span>
+                        <Play className="w-10 h-10 text-white accent-glow transition-transform group-hover:scale-125 duration-500" />
+                        <span className="text-5xl font-black italic tracking-tighter">EXECUTE_DEPLOYMENT</span>
                       </>
                     )}
                   </motion.button>
@@ -1688,9 +2070,9 @@ export default function EventPlatform() {
                         syncProgress({ isFinished: true });
                       }
                     }}
-                    className="glass rounded-[2.5rem] p-6 flex items-center justify-center border-white/5 hover:border-emerald-500/40 hover:bg-emerald-500/5 transition duration-500 disabled:opacity-20 disabled:cursor-not-allowed group"
+                    className="glass rounded-[3rem] p-8 flex items-center justify-center border-white/5 hover:border-emerald-500/40 hover:bg-emerald-500/5 transition-all duration-700 disabled:opacity-30 disabled:cursor-not-allowed group shadow-2xl"
                   >
-                    <ChevronRight className={`w-14 h-14 transition-all duration-700 ${isSolved ? 'text-emerald-400 scale-110' : 'text-slate-800'}`} />
+                    <ChevronRight className={`w-16 h-16 transition-all duration-700 ${isSolved ? 'text-emerald-400 scale-125 drop-shadow-[0_0_15px_rgba(52,211,153,0.4)]' : 'text-slate-800'}`} />
                   </motion.button>
                 </div>
               </div>
