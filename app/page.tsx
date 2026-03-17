@@ -452,17 +452,56 @@ export default function EventPlatform() {
           totalTeams={totalTeams} leaderboard={leaderboard}
           globalTimeLeft={globalTimeLeft} globalTimerActive={globalTimerActive}
           round1Enabled={round1Enabled}
-          onResetAllPoints={() => {}} // Connect matching functions
+          onResetAllPoints={async () => {
+            if (confirm("Are you sure you want to reset all teams? This will clear all scores, active sessions, and times.")) {
+               try {
+                 const allTeams = await getDocs(collection(db, "teams"));
+                 allTeams.forEach(d => {
+                   setDoc(doc(db, "teams", d.id), { 
+                     score: 0, 
+                     tabSwitches: 0, 
+                     deviceId: "", 
+                     isCompleted: false, 
+                     totalTimeTaken: 0 
+                   }, { merge: true });
+                 });
+                 const allSessions = await getDocs(collection(db, "activeSessions"));
+                 allSessions.forEach(d => {
+                   setDoc(doc(db, "activeSessions", d.id), { 
+                     active: false, 
+                     deviceId: "",
+                     score: 0,
+                     tabSwitches: 0,
+                     totalTimeTaken: 0
+                   }, { merge: true });
+                 });
+                 // Also reset timer to default 5 mins
+                 setDoc(doc(db, "eventSettings", "metadata"), { globalTimeLeft: 300, globalTimerActive: false, timerEndTime: null, round1Enabled: false }, { merge: true });
+                 alert("Arena completely reset.");
+               } catch (e) {
+                 console.error(e);
+                 alert("Failed to reset");
+               }
+            }
+          }}
           onSetRound1Status={(s) => setDoc(doc(db, "eventSettings", "metadata"), { round1Enabled: s }, { merge: true })}
           onAdjustGlobalTimer={(seconds) => {
             const newTime = Math.max(0, globalTimeLeft + seconds);
-            setDoc(doc(db, "eventSettings", "metadata"), { globalTimeLeft: newTime }, { merge: true });
+            const update: any = { globalTimeLeft: newTime };
+            if (globalTimerActive) {
+              update.timerEndTime = Date.now() + newTime * 1000;
+            }
+            setDoc(doc(db, "eventSettings", "metadata"), update, { merge: true });
           }} 
           onToggleGlobalTimer={() => {
             const newState = !globalTimerActive;
             const update: any = { globalTimerActive: newState };
             if (newState) {
               update.timerEndTime = Date.now() + globalTimeLeft * 1000;
+            } else {
+              // Save the paused remaining time to Firebase
+              update.globalTimeLeft = globalTimeLeft;
+              update.timerEndTime = null;
             }
             setDoc(doc(db, "eventSettings", "metadata"), update, { merge: true });
           }}

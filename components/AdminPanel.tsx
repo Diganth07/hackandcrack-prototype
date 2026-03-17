@@ -78,17 +78,56 @@ export default function AdminDashboard({
             </motion.h1>
           </div>
 
-          <div className="flex flex-wrap gap-3">
+          <div className="flex flex-wrap items-center gap-3">
+            {/* Global Timer Controls */}
+            <div className="flex items-center gap-4 bg-white/5 rounded-xl px-4 py-2 border border-white/10">
+              <div className="flex flex-col items-center justify-center">
+                <span className="text-[8px] font-black text-neutral-500 uppercase tracking-widest leading-none mb-1">Global Timer</span>
+                <span className={`text-xl font-black tabular-nums tracking-wider ${globalTimeLeft < 60 ? 'text-red-500 animate-pulse' : 'text-white'}`}>
+                  {Math.floor(globalTimeLeft / 60).toString().padStart(2, '0')}:{(globalTimeLeft % 60).toString().padStart(2, '0')}
+                </span>
+              </div>
+              <div className="w-px h-8 bg-white/10 mx-1"></div>
+              <div className="flex gap-2">
+                <button
+                  onClick={onToggleGlobalTimer}
+                  className={`px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-wider transition-colors ${
+                    globalTimerActive 
+                      ? 'bg-red-500/20 text-red-500 hover:bg-red-500/30 border border-red-500/20' 
+                      : 'bg-emerald-500/20 text-emerald-500 hover:bg-emerald-500/30 border border-emerald-500/20'
+                  }`}
+                >
+                  {globalTimerActive ? "Stop Timer" : "Start Timer"}
+                </button>
+                <button 
+                  onClick={() => onAdjustGlobalTimer(60)} 
+                  className="px-3 py-2 rounded-lg bg-white/5 hover:bg-white/10 text-neutral-300 text-xs font-bold transition-all"
+                  title="Add 1 Minute"
+                >
+                  +1m
+                </button>
+                <button 
+                  onClick={() => onAdjustGlobalTimer(-60)} 
+                  className="px-3 py-2 rounded-lg bg-white/5 hover:bg-white/10 text-neutral-300 text-xs font-bold transition-all"
+                  title="Remove 1 Minute"
+                >
+                  -1m
+                </button>
+              </div>
+            </div>
+
+            <div className="w-px h-10 bg-white/10 mx-2 hidden lg:block"></div>
+
             <button onClick={onResetAllPoints} className="btn-ghost !text-neutral-300 hover:!text-white !py-3 !px-5 !text-[11px] uppercase tracking-wider">
               <RefreshCcw className="w-4 h-4" /> Reset Nodes
             </button>
 
             <button
               onClick={() => onSetRound1Status(!round1Enabled)}
-              className={`btn-ghost !py-3 !px-5 !text-[11px] uppercase tracking-wider transition-all ${round1Enabled ? "!bg-blue-600 !border-blue-500 !text-white hover:!bg-blue-700" : ""}`}
+              className={`btn-ghost !py-3 !px-5 !text-[11px] uppercase tracking-wider transition-all ${round1Enabled ? "!bg-red-600/20 !border-red-500/50 !text-red-500 hover:!bg-red-600/30" : "!bg-blue-600 !border-blue-500 !text-white hover:!bg-blue-700"}`}
             >
-              <Activity className="w-4 h-4" />
-              {round1Enabled ? "Pause Round 1" : "Start Round 1"}
+              <Activity className="w-4 h-4 mr-2" />
+              {round1Enabled ? "Stop Test (Lock Arena)" : "Start Test (Unlock Arena)"}
             </button>
 
             <div className="w-px h-10 bg-white/10 mx-2 hidden md:block"></div>
