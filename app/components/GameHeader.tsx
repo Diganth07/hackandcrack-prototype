@@ -55,15 +55,6 @@ export default function GameHeader({
           </div>
         </div>
 
-        <motion.button
-          whileHover={{ scale: 1.05 }}
-          whileTap={{ scale: 0.95 }}
-          onClick={handleLogout}
-          className="btn-secondary !text-rose-500 !border-rose-500/10 hover:!border-rose-500/50 !px-6 !py-4"
-        >
-          <LogOut className="w-5 h-5" />
-          ABORT
-        </motion.button>
       </div>
     </header>
   );
