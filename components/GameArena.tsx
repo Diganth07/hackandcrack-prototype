@@ -11,7 +11,8 @@ import {
   Code2, 
   Timer,
   Award,
-  Circle
+  Circle,
+  ShieldAlert
 } from "lucide-react";
 import Editor from "@monaco-editor/react";
 import { Question } from "../data/questions";
@@ -41,6 +42,7 @@ interface GameArenaProps {
   isFinished: boolean;
   globalTimerActive: boolean;
   round1Enabled: boolean;
+  isDisqualified: boolean;
 }
 
 export default function GameArena({
@@ -67,8 +69,29 @@ export default function GameArena({
   isRound1Completed,
   isFinished,
   globalTimerActive,
-  round1Enabled
+  round1Enabled,
+  isDisqualified
 }: GameArenaProps) {
+
+  if (isDisqualified) {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-6 bg-grid">
+        <motion.div
+           initial={{ scale: 0.9, opacity: 0 }}
+           animate={{ scale: 1, opacity: 1 }}
+           className="glass-card !p-12 text-center max-w-xl border-red-500/20 shadow-2xl"
+        >
+          <div className="inline-block p-5 bg-red-500/10 rounded-3xl mb-8">
+            <ShieldAlert className="w-12 h-12 text-red-400" />
+          </div>
+          <h2 className="text-4xl font-black italic text-red-500 mb-2 tracking-tight uppercase">DISQUALIFIED</h2>
+          <p className="text-red-500 font-black tracking-[0.4em] uppercase text-[9px] mb-10 italic">Multiple Security Deviations Detected</p>
+          <p className="text-slate-400 font-medium text-sm leading-relaxed mb-10">Your session has been forcibly terminated due to multiple unauthorized terminal exits or direct ejection from Central Command.</p>
+          <button onClick={onLogout} className="btn-ghost w-full !py-4 hover:bg-white/5 border border-white/10">DISCONNECT</button>
+        </motion.div>
+      </div>
+    );
+  }
 
   if (isFinished) {
     return (

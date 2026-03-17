@@ -60,6 +60,7 @@ export default function EventPlatform() {
   const [tabSwitches, setTabSwitches] = useState(0);
   const [totalTimeTaken, setTotalTimeTaken] = useState(0); // Cumulative time in seconds
   const [questionStartTime, setQuestionStartTime] = useState<number>(Date.now());
+  const [isDisqualified, setIsDisqualified] = useState(false);
 
   // Timers & Settings
   const [round1Enabled, setRound1Enabled] = useState(false);
@@ -115,6 +116,7 @@ export default function EventPlatform() {
         } else {
           setTimerEndTime(null);
           setGlobalTimeLeft(data.globalTimeLeft ?? 300);
+          if ((data.globalTimeLeft ?? 300) > 0) setIsRound1Completed(false);
         }
       }
     });
@@ -133,8 +135,9 @@ export default function EventPlatform() {
           ...t,
           active: ad?.active === true,
           score: typeof ad?.score === "number" ? ad.score : t.score,
-          tabSwitches: ad?.tabSwitches || 0,
-          totalTimeTaken: ad?.totalTimeTaken ?? t.totalTimeTaken
+          tabSwitches: typeof ad?.tabSwitches === "number" ? ad.tabSwitches : (t.tabSwitches || 0),
+          totalTimeTaken: ad?.totalTimeTaken ?? t.totalTimeTaken,
+          isDisqualified: ad?.isDisqualified || t.isDisqualified || false
         };
       });
       setLeaderboard(fullBoard.sort((a, b) => {
@@ -148,8 +151,9 @@ export default function EventPlatform() {
         team: doc.id,
         score: doc.data().score || 0,
         totalTimeTaken: doc.data().totalTimeTaken || 0,
+        isDisqualified: doc.data().isDisqualified || false,
         active: false,
-        tabSwitches: 0
+        tabSwitches: doc.data().tabSwitches || 0
       }));
       setTotalTeams(teamsSnapshot.size);
       updateLeaderboard();
@@ -170,6 +174,24 @@ export default function EventPlatform() {
     };
   }, []);
 
+  // Listen specifically to this team's doc when in game to catch immediate disqualification
+  useEffect(() => {
+    if (view !== "game" || !teamName) return;
+    
+    // Check local disqualification state first
+    if (isDisqualified) return;
+
+    const unsub = onSnapshot(doc(db, "activeSessions", teamName), (docSnap) => {
+      if (docSnap.exists()) {
+        const d = docSnap.data();
+        if (d.isDisqualified) {
+           setIsDisqualified(true);
+        }
+      }
+    });
+    return () => unsub();
+  }, [view, teamName, isDisqualified]);
+
   // --- LOGIC & HANDLERS ---
 
   const syncProgress = async (updates: any) => {
@@ -178,10 +200,11 @@ export default function EventPlatform() {
     try {
       await setDoc(doc(db, "activeSessions", name), updates, { merge: true });
       
-      const teamUpdates: any = {};
+          const teamUpdates: any = {};
       if (updates.score !== undefined) teamUpdates.score = updates.score;
       if (updates.tabSwitches !== undefined) teamUpdates.tabSwitches = updates.tabSwitches;
       if (updates.totalTimeTaken !== undefined) teamUpdates.totalTimeTaken = updates.totalTimeTaken;
+      if (updates.isDisqualified !== undefined) teamUpdates.isDisqualified = updates.isDisqualified;
       
       if (Object.keys(teamUpdates).length > 0) {
         await setDoc(doc(db, "teams", name), teamUpdates, { merge: true });
@@ -224,10 +247,16 @@ export default function EventPlatform() {
       const activeSnap = await getDocs(query(collection(db, "activeSessions"), where("teamName", "==", teamName)));
       if (!activeSnap.empty) {
         const sess = activeSnap.docs[0].data();
+        if (sess.isDisqualified) throw new Error("Terminal Access Revoked: Account Disqualified by System Admin.");
         if (sess.active && sess.deviceId !== deviceId) throw new Error("Team already playing elsewhere!");
       }
 
       // Finalize Login
+      const fetchedTeamData = snap.exists() ? snap.data() : { isDisqualified: false, tabSwitches: 0 };
+      if (fetchedTeamData.isDisqualified) {
+         throw new Error("Terminal Access Revoked: Account Disqualified by System Admin.");
+      }
+
       await setDoc(doc(db, "activeSessions", teamName), {
         teamName, deviceId, active: true, loginTime: new Date()
       }, { merge: true });
@@ -382,7 +411,12 @@ export default function EventPlatform() {
       interval = setInterval(() => {
         const rem = Math.max(0, Math.floor((timerEndTime - Date.now()) / 1000));
         setGlobalTimeLeft(rem);
-        if (rem <= 0) { setIsRound1Completed(true); setGlobalTimerActive(false); }
+        if (rem <= 0) { 
+           setIsRound1Completed(true); 
+           setGlobalTimerActive(false); 
+        } else {
+           setIsRound1Completed(false);
+        }
       }, 500);
     }
     return () => clearInterval(interval);
@@ -404,12 +438,16 @@ export default function EventPlatform() {
 
   // --- ANTI-CHEAT (Tab Switching) ---
   useEffect(() => {
-    if (view !== "game") return;
+    if (view !== "game" || isDisqualified) return;
 
-    const handleFocusLoss = () => {
+        const handleFocusLoss = () => {
       setTabSwitches(prev => {
         const newCount = prev + 1;
         syncProgress({ tabSwitches: newCount });
+        if (newCount >= 3) {
+            syncProgress({ isDisqualified: true });
+            setIsDisqualified(true);
+        }
         return newCount;
       });
     };
@@ -462,6 +500,7 @@ export default function EventPlatform() {
                      tabSwitches: 0, 
                      deviceId: "", 
                      isCompleted: false, 
+                     isDisqualified: false,
                      totalTimeTaken: 0 
                    }, { merge: true });
                  });
@@ -472,6 +511,7 @@ export default function EventPlatform() {
                      deviceId: "",
                      score: 0,
                      tabSwitches: 0,
+                     isDisqualified: false,
                      totalTimeTaken: 0
                    }, { merge: true });
                  });
@@ -506,21 +546,27 @@ export default function EventPlatform() {
             setDoc(doc(db, "eventSettings", "metadata"), update, { merge: true });
           }}
           onForceLogout={async (tName) => {
-             await setDoc(doc(db, "activeSessions", tName), { active: false }, { merge: true });
+             // Mark them as disqualified so they cannot just log back in
+             await setDoc(doc(db, "teams", tName), { isDisqualified: true }, { merge: true });
+             await setDoc(doc(db, "activeSessions", tName), { active: false, isDisqualified: true }, { merge: true });
           }}
           onRetest={async (tName) => {
-             // Reset team stats and clear completions
+             // Reset team stats and clear completions, and remove any disqualification
              await setDoc(doc(db, "teams", tName), { 
                score: 0, 
                tabSwitches: 0, 
                deviceId: "", 
                isCompleted: false,
+               isDisqualified: false,
                totalTimeTaken: 0
              }, { merge: true });
              // Clear out active sessions to let them login fresh
              await setDoc(doc(db, "activeSessions", tName), { 
                active: false, 
-               deviceId: "" 
+               deviceId: "",
+               isDisqualified: false,
+               score: 0,
+               tabSwitches: 0
              }, { merge: true });
           }}
           onExit={() => setView("role-selection")}
@@ -539,6 +585,7 @@ export default function EventPlatform() {
           setShowRoundIntro={setShowRoundIntro} isRound1Completed={isRound1Completed}
           isFinished={isFinished} globalTimerActive={globalTimerActive}
           round1Enabled={round1Enabled}
+          isDisqualified={isDisqualified}
         />
       )}
     </AnimatePresence>
