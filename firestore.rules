@@ -1,0 +1,33 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Team collection: Teams can only read their own data (if we added auth)
+    // For this prototype, we'll allow public registry but restricted updates
+    match /teams/{teamId} {
+      allow read: if true;
+      allow create: if true;
+      // Only allow score updates if it's an incremental update (primitive protection)
+      allow update: if request.resource.data.score >= resource.data.score;
+    }
+    
+    // Active Sessions: Crucial for real-time tracking
+    match /activeSessions/{teamId} {
+      allow read: if true;
+      allow write: if true; 
+      // In production, use: allow write: if request.auth != null && request.auth.uid == teamId;
+    }
+    
+    // Event Settings: ONLY Admin should write
+    match /eventSettings/{settingId} {
+      allow read: if true;
+      allow write: if false; // Lock this down! Use Admin SDK or high-level auth to edit.
+    }
+
+    // Leaderboard/Leaderboard: Read-only for participants
+    match /leaderboard/{docId} {
+      allow read: if true;
+      allow write: if false;
+    }
+  }
+}
