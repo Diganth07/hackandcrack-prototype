@@ -27,6 +27,7 @@ interface AdminDashboardProps {
   onAdjustGlobalTimer: (seconds: number) => void;
   onToggleGlobalTimer: () => void;
   onForceLogout: (teamId: string) => void;
+  onRetest: (teamId: string) => void;
   onExit: () => void;
 }
 
@@ -41,6 +42,7 @@ export default function AdminDashboard({
   onAdjustGlobalTimer,
   onToggleGlobalTimer,
   onForceLogout,
+  onRetest,
   onExit
 }: AdminDashboardProps) {
   // Stats calculations for spectator dashboard
@@ -151,6 +153,7 @@ export default function AdminDashboard({
                     <th className="px-8 py-5">Rank</th>
                     <th className="px-8 py-5">Team Identity</th>
                     <th className="px-8 py-5 text-center">Protocol Score</th>
+                    <th className="px-8 py-5 text-center">Time (s)</th>
                     <th className="px-8 py-5 text-center">Warnings</th>
                     <th className="px-8 py-5">Status</th>
                     <th className="px-8 py-5 text-right">Action</th>
@@ -181,6 +184,11 @@ export default function AdminDashboard({
                           </span>
                         </td>
                         <td className="px-8 py-4 text-center">
+                          <span className="font-bold text-neutral-400 tabular-nums">
+                            {team.totalTimeTaken ? `${team.totalTimeTaken}s` : '0s'}
+                          </span>
+                        </td>
+                        <td className="px-8 py-4 text-center">
                           <span className={`px-3 py-1 rounded-md font-bold text-xs ${team.tabSwitches > 3 ? 'bg-neutral-800 text-white border border-neutral-600' : 'text-neutral-500'}`}>
                             {team.tabSwitches || 0}
                           </span>
@@ -193,7 +201,14 @@ export default function AdminDashboard({
                             </span>
                           </div>
                         </td>
-                        <td className="px-8 py-4 text-right">
+                        <td className="px-8 py-4 text-right flex justify-end gap-2">
+                          <button onClick={() => {
+                            if (confirm(`Are you sure you want to retest ${team.team}? This will reset their score and completions.`)) {
+                              onRetest(team.team);
+                            }
+                          }} className="opacity-0 group-hover:opacity-100 transition-opacity text-xs font-bold uppercase tracking-widest text-blue-500 hover:text-blue-300 px-3 py-1.5 border border-transparent hover:border-blue-500/20 rounded-lg">
+                            Retest
+                          </button>
                           <button onClick={() => onForceLogout(team.team)} className="opacity-0 group-hover:opacity-100 transition-opacity text-xs font-bold uppercase tracking-widest text-neutral-500 hover:text-white px-3 py-1.5 border border-transparent hover:border-white/20 rounded-lg">
                             Eject
                           </button>
@@ -203,7 +218,7 @@ export default function AdminDashboard({
                   </AnimatePresence>
                   {leaderboard.length === 0 && (
                     <tr>
-                      <td colSpan={5} className="p-20 text-center flex flex-col items-center justify-center gap-4">
+                      <td colSpan={7} className="p-20 text-center flex flex-col items-center justify-center gap-4">
                         <Network className="w-10 h-10 text-neutral-700 mx-auto" />
                         <span className="text-neutral-600 font-bold uppercase tracking-[0.4em] text-[10px]">
                           Awaiting connections from participants

@@ -133,16 +133,21 @@ export default function EventPlatform() {
           ...t,
           active: ad?.active === true,
           score: typeof ad?.score === "number" ? ad.score : t.score,
-          tabSwitches: ad?.tabSwitches || 0
+          tabSwitches: ad?.tabSwitches || 0,
+          totalTimeTaken: ad?.totalTimeTaken ?? t.totalTimeTaken
         };
       });
-      setLeaderboard(fullBoard.sort((a, b) => b.score - a.score));
+      setLeaderboard(fullBoard.sort((a, b) => {
+        if (b.score !== a.score) return b.score - a.score;
+        return a.totalTimeTaken - b.totalTimeTaken; // Tie-breaker: lesser time wins
+      }));
     };
 
     const unsubscribeTeams = onSnapshot(query(collection(db, "teams")), (teamsSnapshot) => {
       latestTeamsInfo = teamsSnapshot.docs.map(doc => ({
         team: doc.id,
         score: doc.data().score || 0,
+        totalTimeTaken: doc.data().totalTimeTaken || 0,
         active: false,
         tabSwitches: 0
       }));
@@ -355,7 +360,16 @@ export default function EventPlatform() {
     finally { setIsRunning(false); }
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+      const name = teamName || localStorage.getItem("eventTeamName");
+      if (name) {
+          try {
+              await setDoc(doc(db, "teams", name), { isCompleted: true }, { merge: true });
+              await setDoc(doc(db, "activeSessions", name), { active: false }, { merge: true });
+          } catch (e) {
+              console.error("Failed to mark team as completed on logout", e);
+          }
+      }
       // Clear all
       localStorage.clear();
       window.location.reload(); // Hard refresh to reset state
@@ -454,6 +468,21 @@ export default function EventPlatform() {
           }}
           onForceLogout={async (tName) => {
              await setDoc(doc(db, "activeSessions", tName), { active: false }, { merge: true });
+          }}
+          onRetest={async (tName) => {
+             // Reset team stats and clear completions
+             await setDoc(doc(db, "teams", tName), { 
+               score: 0, 
+               tabSwitches: 0, 
+               deviceId: "", 
+               isCompleted: false,
+               totalTimeTaken: 0
+             }, { merge: true });
+             // Clear out active sessions to let them login fresh
+             await setDoc(doc(db, "activeSessions", tName), { 
+               active: false, 
+               deviceId: "" 
+             }, { merge: true });
           }}
           onExit={() => setView("role-selection")}
         />

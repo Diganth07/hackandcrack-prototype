@@ -133,12 +133,12 @@ export default function GameArena({
         <motion.div
            initial={{ scale: 0.9, opacity: 0 }}
            animate={{ scale: 1, opacity: 1 }}
-           className="glass-card !p-12 text-center max-w-xl border-blue-500/20 shadow-2xl"
+           className="glass-card !p-12 text-center max-w-xl border-purple-500/20 shadow-2xl"
         >
-          <div className="inline-block p-5 bg-blue-500/10 rounded-3xl mb-8">
-            <Timer className="w-12 h-12 text-blue-400 animate-pulse" />
+          <div className="inline-block p-5 bg-purple-500/10 rounded-3xl mb-8">
+            <Timer className="w-12 h-12 text-purple-400 animate-pulse" />
           </div>
-          <h2 className="text-4xl font-black italic text-white mb-2 tracking-tight uppercase">WAITING FOR ADMIN</h2>
+          <h2 className="text-4xl font-black italic text-white mb-2 tracking-tight uppercase">WAITING FROM ADMIN...</h2>
           <p className="text-blue-500 font-black tracking-[0.4em] uppercase text-[9px] mb-10 italic">Please stand by...</p>
           <p className="text-slate-400 font-medium text-sm leading-relaxed mb-10">The arena will unlock momentarily once Central Command initiates the phase.</p>
         </motion.div>
