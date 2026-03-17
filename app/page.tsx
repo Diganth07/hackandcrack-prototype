@@ -58,6 +58,8 @@ export default function EventPlatform() {
   const [showRoundIntro, setShowRoundIntro] = useState(false);
   const [isRound1Completed, setIsRound1Completed] = useState(false);
   const [tabSwitches, setTabSwitches] = useState(0);
+  const [totalTimeTaken, setTotalTimeTaken] = useState(0); // Cumulative time in seconds
+  const [questionStartTime, setQuestionStartTime] = useState<number>(Date.now());
 
   // Timers & Settings
   const [round1Enabled, setRound1Enabled] = useState(false);
@@ -76,20 +78,36 @@ export default function EventPlatform() {
   const isSolvedRef = useRef(isSolved);
   const scoreRef = useRef(score);
   const teamNameRef = useRef(teamName);
+  const questionStartTimeRef = useRef(questionStartTime);
+  const totalTimeTakenRef = useRef(totalTimeTaken);
+  const answeredInR1Ref = useRef(answeredInR1);
 
   useEffect(() => { currentQIndexRef.current = currentQIndex; }, [currentQIndex]);
   useEffect(() => { isSolvedRef.current = isSolved; }, [isSolved]);
   useEffect(() => { scoreRef.current = score; }, [score]);
   useEffect(() => { teamNameRef.current = teamName; }, [teamName]);
+  useEffect(() => { questionStartTimeRef.current = questionStartTime; }, [questionStartTime]);
+  useEffect(() => { totalTimeTakenRef.current = totalTimeTaken; }, [totalTimeTaken]);
+  useEffect(() => { answeredInR1Ref.current = answeredInR1; }, [answeredInR1]);
 
   // --- FIREBASE SYNC ---
+
+  const round1EnabledRef = useRef(round1Enabled);
+  useEffect(() => { round1EnabledRef.current = round1Enabled; }, [round1Enabled]);
 
   // Global Settings Listener
   useEffect(() => {
     const unsub = onSnapshot(doc(db, "eventSettings", "metadata"), (docSnap) => {
       if (docSnap.exists()) {
         const data = docSnap.data();
-        setRound1Enabled(data.round1Enabled || false);
+        const newRound1Enabled = data.round1Enabled || false;
+        
+        if (newRound1Enabled && !round1EnabledRef.current) {
+             // Admin just started it
+             setShowRoundIntro(false);
+             setQuestionStartTime(Date.now());
+        }
+        setRound1Enabled(newRound1Enabled);
         setGlobalTimerActive(data.globalTimerActive ?? false);
 
         if (data.globalTimerActive && data.timerEndTime) {
@@ -158,6 +176,7 @@ export default function EventPlatform() {
       const teamUpdates: any = {};
       if (updates.score !== undefined) teamUpdates.score = updates.score;
       if (updates.tabSwitches !== undefined) teamUpdates.tabSwitches = updates.tabSwitches;
+      if (updates.totalTimeTaken !== undefined) teamUpdates.totalTimeTaken = updates.totalTimeTaken;
       
       if (Object.keys(teamUpdates).length > 0) {
         await setDoc(doc(db, "teams", name), teamUpdates, { merge: true });
@@ -210,7 +229,15 @@ export default function EventPlatform() {
 
       localStorage.setItem("eventTeamName", teamName);
       setView("game");
-      if (currentQIndex === 0) setShowRoundIntro(true);
+      // If round 1 is already enabled, skip intro and start immediately
+      if (currentQIndex === 0) {
+        if (round1Enabled) {
+          setShowRoundIntro(false);
+          setQuestionStartTime(Date.now());
+        } else {
+          setShowRoundIntro(true); // they will see "WAITING FOR ADMIN" essentially, actually in GameArena if !round1Enabled it overrides it anyway.
+        }
+      }
     } catch (e: any) {
       alert(e.message || "Login failed");
     } finally { setIsLoggingIn(false); }
@@ -232,27 +259,59 @@ export default function EventPlatform() {
 
   const handleOptionClick = async (option: string) => {
     if (answeredInR1.has(currentQIndex)) return;
+    
+    // Calculate time taken for this question
+    const timeTakenStr = ((Date.now() - questionStartTime) / 1000).toFixed(2);
+    const timeTakenSecs = parseFloat(timeTakenStr);
+    const newTotalTime = totalTimeTaken + timeTakenSecs;
+    setTotalTimeTaken(newTotalTime);
+    totalTimeTakenRef.current = newTotalTime;
+
     const isCorrect = option === questions[currentQIndex].correctAnswer;
+    let newScore = score;
     if (isCorrect) {
-      const newScore = score + 1;
+      newScore = score + 1;
       setScore(newScore);
-      syncProgress({ score: newScore });
     }
+    
+    syncProgress({ score: newScore, totalTimeTaken: newTotalTime });
+    
     const newAnswered = new Set(answeredInR1).add(currentQIndex);
     setAnsweredInR1(newAnswered);
+    answeredInR1Ref.current = newAnswered;
     // Move to next automatically for MCQs
     handleNextQuestion();
   };
 
   const handleNextQuestion = () => {
-    const next = currentQIndex + 1;
+    const qIndex = currentQIndexRef.current;
+    const q = questions[qIndex];
+    let newTotalTime = totalTimeTakenRef.current;
+
+    // For MCQs, time is already added in handleOptionClick.
+    // For Coding, time is added in runCode when correct.
+    // If they skip a coding question (isSolved == false) or timeout on it, we calculate time here.
+    // Also if they timeout on an MCQ!
+    if (!isSolvedRef.current && !answeredInR1Ref.current.has(qIndex)) {
+        const timeTakenSecs = parseFloat(((Date.now() - questionStartTimeRef.current) / 1000).toFixed(2));
+        newTotalTime = totalTimeTakenRef.current + Math.min(timeTakenSecs, 30); // max 30s
+        setTotalTimeTaken(newTotalTime);
+        totalTimeTakenRef.current = newTotalTime;
+    }
+
+    const next = qIndex + 1;
     if (next < questions.length) {
       setCurrentQIndex(next);
       setQuestionTimeLeft(30);
-      syncProgress({ currentQIndex: next });
+      setIsSolved(false); // Reset isSolved for the next question
+      isSolvedRef.current = false;
+      const now = Date.now();
+      setQuestionStartTime(now); // Reset start time for next question
+      questionStartTimeRef.current = now;
+      syncProgress({ currentQIndex: next, totalTimeTaken: newTotalTime });
     } else {
       setIsFinished(true);
-      syncProgress({ isFinished: true });
+      syncProgress({ isFinished: true, totalTimeTaken: newTotalTime });
     }
   };
 
@@ -276,10 +335,17 @@ export default function EventPlatform() {
       const q = questions[currentQIndexRef.current];
       if (clean === q.expectedOutput) {
         if (!isSolvedRef.current) {
+          const timeTakenStr = ((Date.now() - questionStartTimeRef.current) / 1000).toFixed(2);
+          const timeTakenSecs = parseFloat(timeTakenStr);
+          const newTotalTime = totalTimeTakenRef.current + timeTakenSecs;
+          setTotalTimeTaken(newTotalTime);
+          totalTimeTakenRef.current = newTotalTime;
+
           const ns = scoreRef.current + 1;
           setScore(ns);
           setIsSolved(true);
-          syncProgress({ score: ns });
+          isSolvedRef.current = true;
+          syncProgress({ score: ns, totalTimeTaken: newTotalTime });
         }
         setOutput(out + "\n✅ CORRECT!");
       } else {
@@ -312,7 +378,10 @@ export default function EventPlatform() {
       if (!round1Enabled || !globalTimerActive || isRound1Completed || round !== 1) return;
       const interval = setInterval(() => {
           setQuestionTimeLeft(prev => {
-              if (prev <= 1) { handleNextQuestion(); return 30; }
+              if (prev <= 1) { 
+                 handleNextQuestion(); 
+                 return 30; 
+              }
               return prev - 1;
           });
       }, 1000);
