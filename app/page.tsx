@@ -154,8 +154,13 @@ export default function EventPlatform() {
     if (!name) return;
     try {
       await setDoc(doc(db, "activeSessions", name), updates, { merge: true });
-      if (updates.score !== undefined) {
-        await setDoc(doc(db, "teams", name), { score: updates.score }, { merge: true });
+      
+      const teamUpdates: any = {};
+      if (updates.score !== undefined) teamUpdates.score = updates.score;
+      if (updates.tabSwitches !== undefined) teamUpdates.tabSwitches = updates.tabSwitches;
+      
+      if (Object.keys(teamUpdates).length > 0) {
+        await setDoc(doc(db, "teams", name), teamUpdates, { merge: true });
       }
     } catch (e) { console.error("Sync Error:", e); }
   };
@@ -212,9 +217,17 @@ export default function EventPlatform() {
   };
 
   const handleAdminAuth = async () => {
-    const isValid = await verifyAdminPassword(inputAdminPass);
-    if (isValid) setView("admin-dashboard");
-    else alert("Invalid Admin Key");
+    try {
+      const isValid = await verifyAdminPassword(inputAdminPass);
+      if (isValid) {
+        setView("admin-dashboard");
+      } else {
+        alert("Invalid Admin Key");
+      }
+    } catch (error) {
+      console.error("Admin auth error:", error);
+      alert("Error verifying password. Check your connection or server configuration.");
+    }
   };
 
   const handleOptionClick = async (option: string) => {
@@ -305,6 +318,33 @@ export default function EventPlatform() {
       }, 1000);
       return () => clearInterval(interval);
   }, [round1Enabled, globalTimerActive, isRound1Completed, round, currentQIndex]);
+
+  // --- ANTI-CHEAT (Tab Switching) ---
+  useEffect(() => {
+    if (view !== "game") return;
+
+    const handleFocusLoss = () => {
+      setTabSwitches(prev => {
+        const newCount = prev + 1;
+        syncProgress({ tabSwitches: newCount });
+        return newCount;
+      });
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        handleFocusLoss();
+      }
+    };
+
+    window.addEventListener("blur", handleFocusLoss);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      window.removeEventListener("blur", handleFocusLoss);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [view]);
 
   return (
     <AnimatePresence mode="wait">

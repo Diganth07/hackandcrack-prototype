@@ -37,8 +37,8 @@ export default function AdminLogin({
       >
         <div className="glass-card !p-10 border-white/10 shadow-white/5">
           <div className="flex items-center gap-5 mb-10">
-            <div className="p-3 bg-purple-500/10 rounded-xl border border-purple-500/20">
-              <ShieldCheck className="w-6 h-6 text-purple-400" />
+            <div className="px-4 py-3 bg-white/[0.02] border border-white/[0.05] rounded-xl flex items-center justify-center">
+              <img src="/logo.png" alt="Turing Logo" className="w-10 h-auto object-contain drop-shadow-[0_0_15px_rgba(255,255,255,0.2)]" />
             </div>
             <div className="text-left">
               <h2 className="text-3xl font-black tracking-tight text-white uppercase">System Authority</h2>
@@ -56,6 +56,9 @@ export default function AdminLogin({
                   className="w-full bg-black/60 border border-white/10 rounded-xl p-4 pl-12 text-white font-bold text-lg focus:border-purple-500/50 focus:ring-1 focus:ring-purple-500/50 outline-none transition-all placeholder:text-neutral-700"
                   value={passkey}
                   onChange={(e) => setPasskey(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') onLogin();
+                  }}
                 />
                 <Lock className="w-4 h-4 text-neutral-500 absolute left-4 top-1/2 -translate-y-1/2" />
               </div>

@@ -45,38 +45,68 @@ export default function RoleSelection({ onSelectRole }: RoleSelectionProps) {
           initial={{ opacity: 0, x: -50 }}
           animate={{ opacity: 1, x: 0 }}
           transition={{ delay: 0.2 }}
-          className="flex-1 flex flex-col items-start text-left"
+          className="flex-1 flex flex-col items-start text-left relative"
         >
-          <div className="inline-flex items-center gap-4 px-5 py-2.5 rounded-full bg-white/[0.02] border border-white/[0.05] mb-10 backdrop-blur-md">
-            <div className="flex flex-col items-center justify-center text-[8px] font-mono leading-[1.1] text-neutral-400 opacity-80">
-              <span>01</span>
-              <span>10</span>
-            </div>
-            <span className="text-[10px] font-bold tracking-[0.2em] uppercase text-neutral-400">
-              Conducted by <span className="text-white font-black ml-1">TURING CLUB</span>
-            </span>
+          {/* Subtle large background logo watermark */}
+          <div className="absolute -top-20 -left-20 w-[120%] h-[120%] opacity-[0.03] pointer-events-none z-0 mix-blend-screen flex items-center justify-center">
+            <img src="/logo.png" alt="Watermark" className="w-full h-full object-contain" />
           </div>
 
-          <h1 className="text-6xl md:text-[5.5rem] font-black mb-6 tracking-tighter leading-[1] text-white uppercase">
-            <span className="text-white">WELCOME TO</span><br/>
-            <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#7dd3fc] via-[#818cf8] to-[#c084fc]">
-              ROUND ONE.
-            </span>
-          </h1>
+          <div className="relative z-10">
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.8 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ delay: 0.5, duration: 0.8 }}
+              className="mb-8"
+            >
+              <img src="/logo.png" alt="Turing Club Full Logo" className="w-48 md:w-64 h-auto object-contain drop-shadow-[0_0_25px_rgba(255,255,255,0.2)]" />
+            </motion.div>
 
-          <div className="space-y-8 mb-10 max-w-xl">
-            <p className="text-neutral-400 text-lg leading-[1.8] font-medium opacity-90">
-              This is the technical sieve. Your logical reasoning, coding prowess, and debugging skills will be put to the ultimate test in an unforgiving arena.
-            </p>
-            <div className="flex flex-wrap gap-4">
-              <div className="flex items-center gap-2.5 text-xs text-neutral-300 font-bold px-4 py-2 rounded-xl bg-white/[0.03] border border-white/[0.05]">
-                <div className="w-1.5 h-1.5 rounded-full bg-neutral-400" /> 30 Modules
+            <div className="inline-flex items-center gap-4 px-5 py-2.5 rounded-full bg-white/[0.02] border border-white/[0.05] mb-8 backdrop-blur-md">
+              <div className="flex flex-col items-center justify-center text-[8px] font-mono leading-[1.1] text-neutral-400 opacity-80">
+                <span>01</span>
+                <span>10</span>
               </div>
-              <div className="flex items-center gap-2.5 text-xs text-neutral-300 font-bold px-4 py-2 rounded-xl bg-white/[0.03] border border-white/[0.05]">
-                <div className="w-1.5 h-1.5 rounded-full bg-neutral-400" /> Real-time Execution
+              <span className="text-[10px] font-bold tracking-[0.2em] uppercase text-neutral-400">
+                Conducted by <span className="text-white font-black ml-1">TURING CLUB</span>
+              </span>
+            </div>
+
+            <h1 className="text-6xl md:text-[5.5rem] font-black mb-6 tracking-tighter leading-[1] text-white uppercase relative">
+              <span className="text-white">WELCOME TO</span><br/>
+              <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#7dd3fc] via-[#818cf8] to-[#c084fc]">
+                ROUND ONE.
+              </span>
+            </h1>
+
+            <div className="space-y-8 mb-10 max-w-xl">
+              <p className="text-neutral-400 text-lg leading-[1.8] font-medium opacity-90">
+                This is the technical sieve. Your logical reasoning, coding prowess, and rapid-fire debugging skills will be put to the ultimate test in an unforgiving arena.
+              </p>
+              
+              {/* Extra Hero Stats / Technical Decor */}
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-4 border-t border-white/[0.05] pt-6 mt-6">
+                <div>
+                  <div className="text-[10px] text-neutral-500 font-bold uppercase tracking-[0.2em] mb-1">Total Modules</div>
+                  <div className="text-2xl font-black text-white">30<span className="text-[#818cf8]">_</span></div>
+                </div>
+                <div>
+                  <div className="text-[10px] text-neutral-500 font-bold uppercase tracking-[0.2em] mb-1">Execution</div>
+                  <div className="text-2xl font-black text-white">Real-time</div>
+                </div>
+                <div>
+                  <div className="text-[10px] text-neutral-500 font-bold uppercase tracking-[0.2em] mb-1">Network</div>
+                  <div className="text-2xl font-black text-[#7dd3fc] animate-pulse">LIVE</div>
+                </div>
               </div>
-              <div className="flex items-center gap-2.5 text-xs text-neutral-300 font-bold px-4 py-2 rounded-xl bg-white/[0.03] border border-white/[0.05]">
-                <div className="w-1.5 h-1.5 rounded-full bg-neutral-400" /> Global Leaderboard
+
+              <div className="flex flex-wrap gap-4 mt-8">
+                <div className="flex items-center gap-2.5 text-xs text-neutral-300 font-bold px-4 py-2 rounded-xl bg-gradient-to-r from-white/[0.05] to-transparent border border-white/[0.05]">
+                  <div className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse shadow-[0_0_10px_rgba(96,165,250,0.8)]" /> Global Leaderboard Active
+                </div>
+                <div className="flex items-center gap-2.5 text-xs text-neutral-300 font-bold px-4 py-2 rounded-xl bg-gradient-to-r from-white/[0.05] to-transparent border border-white/[0.05]">
+                  <div className="w-1.5 h-1.5 rounded-full bg-purple-400 animate-pulse shadow-[0_0_10px_rgba(192,132,252,0.8)]" /> Anti-Cheat Enforced
+                </div>
               </div>
             </div>
           </div>
@@ -90,7 +120,7 @@ export default function RoleSelection({ onSelectRole }: RoleSelectionProps) {
           className="flex-1 w-full max-w-md flex flex-col gap-6"
         >
           <div className="text-xs font-black tracking-[0.3em] uppercase text-neutral-500 mb-2 border-b border-white/10 pb-2">
-            Identify Identity
+            System Clearance Level
           </div>
 
           {/* Participant Card */}

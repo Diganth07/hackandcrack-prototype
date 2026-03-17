@@ -76,13 +76,13 @@ export default function GameArena({
         <motion.div
           initial={{ scale: 0.9, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
-          className="glass-card !p-12 text-center max-w-xl border-emerald-500/20 shadow-2xl"
+          className="glass-card !p-12 text-center max-w-xl border-blue-500/20 shadow-2xl"
         >
-          <div className="inline-block p-5 bg-emerald-500/10 rounded-3xl mb-8">
-            <Trophy className="w-12 h-12 text-emerald-400" />
+          <div className="inline-block p-5 bg-blue-500/10 rounded-3xl mb-8">
+            <Trophy className="w-12 h-12 text-blue-400" />
           </div>
           <h2 className="text-5xl font-black italic text-white mb-2 tracking-tight uppercase">MISSION_COMPLETE</h2>
-          <p className="text-emerald-500 font-black tracking-[0.4em] uppercase text-[9px] mb-10">System Evaluation Finished</p>
+          <p className="text-blue-500 font-black tracking-[0.4em] uppercase text-[9px] mb-10">System Evaluation Finished</p>
           
           <div className="bg-white/[0.03] rounded-3xl p-8 mb-10 border border-white/5">
             <p className="text-slate-500 font-bold uppercase tracking-widest text-[10px] mb-2">Final Efficiency Rating</p>
@@ -108,13 +108,13 @@ export default function GameArena({
         <motion.div
            initial={{ scale: 0.9, opacity: 0 }}
            animate={{ scale: 1, opacity: 1 }}
-           className="glass-card !p-12 text-center max-w-xl border-amber-500/20 shadow-2xl"
+           className="glass-card !p-12 text-center max-w-xl border-purple-500/20 shadow-2xl"
         >
-          <div className="inline-block p-5 bg-amber-500/10 rounded-3xl mb-8">
-            <Timer className="w-12 h-12 text-amber-400" />
+          <div className="inline-block p-5 bg-purple-500/10 rounded-3xl mb-8">
+            <Timer className="w-12 h-12 text-purple-400" />
           </div>
           <h2 className="text-5xl font-black italic text-white mb-2 tracking-tight uppercase">TIME_EXPIRED_</h2>
-          <p className="text-amber-500 font-black tracking-[0.4em] uppercase text-[9px] mb-10 italic">Synchronization Terminated</p>
+          <p className="text-purple-500 font-black tracking-[0.4em] uppercase text-[9px] mb-10 italic">Synchronization Terminated</p>
           
           <div className="bg-white/[0.03] rounded-3xl p-8 mb-10 border border-white/5">
              <p className="text-slate-500 font-bold uppercase tracking-widest text-[10px] mb-2">Current Efficiency</p>
@@ -133,18 +133,18 @@ export default function GameArena({
         <motion.div
           initial={{ y: 20, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
-          className="glass-card !p-12 max-w-2xl text-center border-emerald-500/20"
+          className="glass-card !p-12 max-w-2xl text-center border-blue-500/20"
         >
-          <div className="p-5 bg-emerald-500/10 rounded-3xl w-fit mx-auto mb-8">
-            <Cpu className="w-10 h-10 text-emerald-400" />
+          <div className="p-5 bg-blue-500/10 rounded-3xl w-fit mx-auto mb-8">
+            <Cpu className="w-10 h-10 text-blue-400" />
           </div>
           <h2 className="text-6xl font-black italic text-white mb-2 tracking-tight">ROUND_0{round}</h2>
-          <p className="text-emerald-500 font-black tracking-[0.4em] uppercase text-[9px] mb-10 italic">Phase Initialization</p>
+          <p className="text-blue-500 font-black tracking-[0.4em] uppercase text-[9px] mb-10 italic">Phase Initialization</p>
           
           <div className="text-left space-y-4 mb-10 text-slate-400 font-medium text-sm border-y border-white/5 py-8">
-            <div className="flex items-center gap-3"><ChevronRight className="w-4 h-4 text-emerald-500" /> 30 technical assessment modules.</div>
-            <div className="flex items-center gap-3"><ChevronRight className="w-4 h-4 text-emerald-500" /> 30-second synchronization window per module.</div>
-            <div className="flex items-center gap-3"><ChevronRight className="w-4 h-4 text-emerald-500" /> Immediate point allocation for accuracy.</div>
+            <div className="flex items-center gap-3"><ChevronRight className="w-4 h-4 text-blue-500" /> 30 technical assessment modules.</div>
+            <div className="flex items-center gap-3"><ChevronRight className="w-4 h-4 text-blue-500" /> 30-second synchronization window per module.</div>
+            <div className="flex items-center gap-3"><ChevronRight className="w-4 h-4 text-blue-500" /> Immediate point allocation for accuracy.</div>
           </div>
           
           <motion.button
@@ -163,13 +163,10 @@ export default function GameArena({
   return (
     <div className="min-h-screen flex flex-col bg-grid">
       <nav className="glass border-b border-white/5 px-8 pt-6 pb-6 flex justify-between items-center sticky top-0 z-50">
-        <div className="flex items-center gap-3">
-          <div className="p-2 bg-emerald-500/10 rounded-lg border border-emerald-500/20">
-            <Award className="w-5 h-5 text-emerald-400" />
-          </div>
-          <div className="flex flex-col">
-            <h1 className="text-2xl font-black italic text-gradient text-glow-emerald tracking-tighter leading-none">HACKandCRACK</h1>
-            <span className="text-[8px] font-black tracking-[0.3em] uppercase text-emerald-500/50 mt-1">Turing Club Arena</span>
+        <div className="flex items-center gap-4">
+          <img src="/logo.png" alt="HACKandCRACK Logo" className="h-12 md:h-16 w-auto object-contain drop-shadow-[0_0_15px_rgba(59,130,246,0.5)]" />
+          <div className="flex flex-col justify-center">
+            <span className="text-[10px] font-black tracking-[0.3em] uppercase text-blue-500/50 mt-1">Turing Club Arena</span>
           </div>
         </div>
 
@@ -177,7 +174,7 @@ export default function GameArena({
           <div className="flex items-center gap-6 bg-white/[0.03] px-6 py-2 rounded-xl border border-white/5">
             <div className="flex flex-col">
               <span className="text-[8px] font-black text-slate-500 uppercase tracking-widest leading-none mb-1">UNIT</span>
-              <span className="text-sm font-black italic text-emerald-400 uppercase">{teamName}</span>
+              <span className="text-sm font-black italic text-blue-400 uppercase">{teamName}</span>
             </div>
             <div className="w-px h-6 bg-white/10" />
             <div className="flex flex-col items-center">
@@ -189,11 +186,11 @@ export default function GameArena({
           <div className="flex items-center gap-4">
             <div className="flex flex-col items-end">
               <span className="text-[8px] font-black text-slate-500 uppercase tracking-widest leading-none mb-1">GLOBAL_TIMER</span>
-              <span className={`text-lg font-black tabular-nums italic ${globalTimeLeft < 60 ? 'text-rose-500 animate-pulse' : 'text-white'}`}>
+              <span className={`text-lg font-black tabular-nums italic ${globalTimeLeft < 60 ? 'text-red-500 animate-pulse' : 'text-white'}`}>
                 {Math.floor(globalTimeLeft / 60).toString().padStart(2, '0')}:{(globalTimeLeft % 60).toString().padStart(2, '0')}
               </span>
             </div>
-            <button onClick={onLogout} className="p-2 rounded-lg bg-rose-500/10 text-rose-500 hover:bg-rose-500 hover:text-white border border-rose-500/20 transition-all">
+            <button onClick={onLogout} className="p-2 rounded-lg bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white border border-red-500/20 transition-all">
               <LogOut className="w-4 h-4" />
             </button>
           </div>
@@ -207,7 +204,7 @@ export default function GameArena({
               <div className="lg:col-span-8 flex flex-col gap-6">
                 <div className="flex justify-between items-center">
                   <div className="badge-live">
-                    <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-ping" />
+                    <span className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-ping" />
                     MODULE_PHASE_01
                   </div>
                   <div className="text-slate-500 font-bold uppercase text-[9px] tracking-widest">
@@ -222,7 +219,7 @@ export default function GameArena({
                   className="glass-card !p-8 flex flex-col justify-between min-h-[400px]"
                 >
                   <div className="space-y-8">
-                    <h3 className="text-emerald-500 font-black uppercase tracking-[0.4em] text-[8px] italic">Question_Context</h3>
+                    <h3 className="text-blue-500 font-black uppercase tracking-[0.4em] text-[8px] italic">Question_Context</h3>
                     <h2 className="text-3xl font-black text-white leading-tight italic tracking-tight">{currentQ.text}</h2>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-8">
@@ -232,10 +229,10 @@ export default function GameArena({
                           whileHover={{ x: 6, scale: 1.01 }}
                           whileTap={{ scale: 0.99 }}
                           onClick={() => onOptionClick(option)}
-                          className="w-full text-left p-6 rounded-2xl bg-black/40 border border-white/5 hover:border-emerald-500/40 hover:bg-emerald-500/5 group transition-all"
+                          className="w-full text-left p-6 rounded-2xl bg-black/40 border border-white/5 hover:border-blue-500/40 hover:bg-blue-500/5 group transition-all"
                         >
                            <div className="flex items-center gap-4">
-                             <div className="w-10 h-10 flex items-center justify-center rounded-xl bg-white/5 border border-white/10 text-slate-500 font-black group-hover:bg-emerald-500 group-hover:text-white transition-all italic text-sm">
+                             <div className="w-10 h-10 flex items-center justify-center rounded-xl bg-white/5 border border-white/10 text-slate-500 font-black group-hover:bg-blue-500 group-hover:text-white transition-all italic text-sm">
                                {String.fromCharCode(65 + i)}
                              </div>
                              <span className="text-sm font-bold text-slate-300 group-hover:text-white transition-colors">{option}</span>
@@ -258,11 +255,11 @@ export default function GameArena({
                         stroke="currentColor" strokeWidth="8" fill="transparent"
                         strokeDasharray={2 * Math.PI * 74}
                         strokeDashoffset={(2 * Math.PI * 74) * (1 - questionTimeLeft / 30)}
-                        className={`transition-all duration-1000 ${questionTimeLeft <= 5 ? 'text-rose-500' : 'text-emerald-400'}`}
+                        className={`transition-all duration-1000 ${questionTimeLeft <= 5 ? 'text-red-500' : 'text-blue-400'}`}
                       />
                     </svg>
                     <div className="absolute inset-0 flex flex-col items-center justify-center">
-                      <span className={`text-5xl font-black italic tabular-nums ${questionTimeLeft <= 5 ? 'text-rose-500 animate-pulse' : 'text-white'}`}>
+                      <span className={`text-5xl font-black italic tabular-nums ${questionTimeLeft <= 5 ? 'text-red-500 animate-pulse' : 'text-white'}`}>
                         {questionTimeLeft}
                       </span>
                     </div>
@@ -276,7 +273,7 @@ export default function GameArena({
                     {['Latency', 'Buffer', 'Encryption'].map((label, idx) => (
                       <div key={label} className="flex justify-between items-center bg-black/20 p-3 rounded-lg border border-white/5">
                         <span className="text-[9px] font-bold text-slate-600 uppercase">{label}</span>
-                        <span className="text-[9px] font-black text-emerald-500">{idx === 0 ? '12ms' : idx === 1 ? 'STABLE' : 'AES-256'}</span>
+                        <span className="text-[9px] font-black text-blue-500">{idx === 0 ? '12ms' : idx === 1 ? 'STABLE' : 'AES-256'}</span>
                       </div>
                     ))}
                   </div>
@@ -321,9 +318,9 @@ export default function GameArena({
                 <div className="glass-card !p-0 flex flex-col border-blue-500/10">
                   <div className="px-6 py-3 border-b border-white/5 flex justify-between items-center bg-black/40">
                     <div className="flex gap-1.5">
-                      <div className="w-2.5 h-2.5 rounded-full bg-rose-500/50" />
-                      <div className="w-2.5 h-2.5 rounded-full bg-amber-500/50" />
-                      <div className="w-2.5 h-2.5 rounded-full bg-emerald-500/50" />
+                      <div className="w-2.5 h-2.5 rounded-full bg-red-500/50" />
+                      <div className="w-2.5 h-2.5 rounded-full bg-purple-500/50" />
+                      <div className="w-2.5 h-2.5 rounded-full bg-blue-500/50" />
                     </div>
                     <button onClick={runCode} disabled={isRunning} className="btn-primary !py-2 !px-6 !text-[9px] !bg-blue-600 shadow-blue-600/20">
                       {isRunning ? "PROCESSING..." : "EXECUTE_BLOCK"}

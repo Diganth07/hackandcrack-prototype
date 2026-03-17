@@ -41,8 +41,8 @@ export default function ParticipantLogin({
       >
         <div className="glass-card !p-10 border-white/10 shadow-white/5">
           <div className="flex items-center gap-5 mb-10">
-            <div className="p-3 bg-blue-500/10 rounded-xl border border-blue-500/20">
-              <Terminal className="w-6 h-6 text-blue-400" />
+            <div className="px-4 py-3 bg-white/[0.02] border border-white/[0.05] rounded-xl flex items-center justify-center">
+              <img src="/logo.png" alt="Turing Logo" className="w-10 h-auto object-contain drop-shadow-[0_0_15px_rgba(255,255,255,0.2)]" />
             </div>
             <div className="text-left">
               <span className="text-[8px] font-black tracking-[0.3em] uppercase text-neutral-500 block mb-1">Turing Club Portal</span>
