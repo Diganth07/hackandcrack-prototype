@@ -846,16 +846,14 @@ export default function EventPlatform() {
       const activeQuery = query(collection(db, "activeSessions"), where("teamName", "==", actualTeamName));
       const activeSnapshot = await getDocs(activeQuery);
 
-      /* RESTRICTION REMOVED: Allow multiple devices if needed, or taking over session
       if (!activeSnapshot.empty) {
         const existingSession = activeSnapshot.docs[0].data();
         if (existingSession.active === true && existingSession.deviceId !== deviceId) {
-          alert(`⚠️ Team "${teamName}" is already playing on another device!`);
+          alert(`⚠️ Team "${actualTeamName}" is already playing on another device!`);
           setIsLoggingIn(false);
           return;
         }
       }
-      */
 
 
       // Get existing progress if session already exists
